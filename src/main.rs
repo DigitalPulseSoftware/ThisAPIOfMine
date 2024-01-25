@@ -49,7 +49,7 @@ struct VersionQuery {
     platform: String,
 }
 
-fn parse_response(asset_name: &str, response: String) -> Option<String> {
+fn parse_response(asset_name: &str, response: &str) -> Option<String> {
     let parts: Vec<_> = response.split_whitespace().collect();
     if parts.len() != 2 {
         eprintln!(
@@ -85,7 +85,7 @@ async fn download_checksum(
     };
 
     match download_sha256(client, &entry.browser_download_url).await {
-        Ok(response) => parse_response(asset.name.as_str(), response),
+        Ok(response) => parse_response(asset.name.as_str(), response.as_str()),
         Err(err) => {
             eprintln!("failed to download sha256 of {entry_name}: {err}");
             None
@@ -97,26 +97,23 @@ async fn download_checksums<'a, 'b, B>(
     assets_asset: Option<&repos::Asset>,
     binary_assets: B,
     hashes_assets: HashMap<&'b str, &repos::Asset>,
-) -> HashMap<&'b str, String> 
-    where
-        'b: 'a,
-        B: Iterator<Item = (&'a &'b str, &'a &'b repos::Asset)>
+) -> HashMap<&'b str, String>
+where
+    'b: 'a,
+    B: Iterator<Item = (&'a &'b str, &'a &'b repos::Asset)>,
 {
     let client = reqwest::Client::new();
 
     let mut hashes = HashMap::new();
     for (entry_name, asset) in binary_assets {
-        if let Some(checksum) = 
-            download_checksum(&client, entry_name, asset, &hashes_assets).await
+        if let Some(checksum) = download_checksum(&client, entry_name, asset, &hashes_assets).await
         {
             hashes.insert(*entry_name, checksum);
         }
     }
-    
+
     if let Some(asset) = assets_asset {
-        if let Some(checksum) = 
-            download_checksum(&client, "assets", asset, &hashes_assets).await
-        {
+        if let Some(checksum) = download_checksum(&client, "assets", asset, &hashes_assets).await {
             hashes.insert("assets", checksum);
         }
     }
@@ -125,7 +122,9 @@ async fn download_checksums<'a, 'b, B>(
 }
 
 fn remove_game_suffix(asset_name: &str) -> &str {
-    let platform = asset_name.find('.').map_or(asset_name, |pos| &asset_name[..pos]);
+    let platform = asset_name
+        .find('.')
+        .map_or(asset_name, |pos| &asset_name[..pos]);
     platform
         .find("_releasedbg")
         .map_or(platform, |pos| &platform[..pos])
@@ -154,33 +153,36 @@ async fn get_updater_releases(
         return None;
     };
 
-    let (binary_assets, hashes_assets) = 
-        last_release.assets.iter().fold(
-            (HashMap::new(), HashMap::new()),
-            |(mut binary_assets, mut hashes_assets), asset| {
-                let platform = remove_game_suffix(asset.name.as_str());
+    let (binary_assets, hashes_assets) = last_release.assets.iter().fold(
+        (HashMap::new(), HashMap::new()),
+        |(mut binary_assets, mut hashes_assets), asset| {
+            let platform = remove_game_suffix(asset.name.as_str());
 
-                let container_assets = match asset.name.ends_with(".sha256") {
-                    true => &mut hashes_assets,
-                    false => &mut binary_assets
-                };
+            let container_assets = match asset.name.ends_with(".sha256") {
+                true => &mut hashes_assets,
+                false => &mut binary_assets,
+            };
 
-                container_assets.insert(platform, asset);
+            container_assets.insert(platform, asset);
 
-                (binary_assets, hashes_assets)
-            });
+            (binary_assets, hashes_assets)
+        },
+    );
 
     let hashes = download_checksums(None, binary_assets.iter(), hashes_assets).await;
 
-    let binaries = binary_assets.into_iter()
-        .map(|(platform, asset)| (
-            platform.to_string(),
-            DownloadableAsset {
-                download_url: asset.browser_download_url.to_string(),
-                size: asset.size,
-                sha256: hashes.get(platform).cloned(),
-            }
-        ))
+    let binaries = binary_assets
+        .into_iter()
+        .map(|(platform, asset)| {
+            (
+                platform.to_string(),
+                DownloadableAsset {
+                    download_url: asset.browser_download_url.to_string(),
+                    size: asset.size,
+                    sha256: hashes.get(platform).cloned(),
+                },
+            )
+        })
         .collect::<HashMap<String, DownloadableAsset>>();
 
     Some(binaries)
@@ -231,23 +233,23 @@ async fn get_game_releases(app_config: &AppConfig) -> Option<Vec<GameRelease>> {
             }
         };
 
-        let (binary_assets, hashes_assets, assets_asset) = 
-            release.assets.iter().fold(
-                (HashMap::new(), HashMap::new(), None),
-                |(mut binary_assets, mut hashes_assets, assets_asset), asset| {
-                    let platform = remove_game_suffix(asset.name.as_str());
-                    
-                    if asset.name.ends_with(".sha256") {
-                        hashes_assets.insert(platform, asset);
-                    } else if platform == "assets" {
-                        return (binary_assets, hashes_assets, Some(asset));
-                    } else {
-                        binary_assets.insert(platform, asset);
-                    }
+        let (binary_assets, hashes_assets, assets_asset) = release.assets.iter().fold(
+            (HashMap::new(), HashMap::new(), None),
+            |(mut binary_assets, mut hashes_assets, assets_asset), asset| {
+                let platform = remove_game_suffix(asset.name.as_str());
 
-                    (binary_assets, hashes_assets, assets_asset)
-                });
-                
+                if asset.name.ends_with(".sha256") {
+                    hashes_assets.insert(platform, asset);
+                } else if platform == "assets" {
+                    return (binary_assets, hashes_assets, Some(asset));
+                } else {
+                    binary_assets.insert(platform, asset);
+                }
+
+                (binary_assets, hashes_assets, assets_asset)
+            },
+        );
+
         let hashes = download_checksums(assets_asset, binary_assets.iter(), hashes_assets).await;
 
         // Build assets
@@ -261,15 +263,18 @@ async fn get_game_releases(app_config: &AppConfig) -> Option<Vec<GameRelease>> {
         }
 
         // Build binaries
-        let binaries = binary_assets.into_iter()
-            .map(|(platform, asset)| (
-                platform.to_string(),
-                DownloadableAsset {
-                    download_url: asset.browser_download_url.to_string(),
-                    size: asset.size,
-                    sha256: hashes.get(platform).cloned(),
-                }
-            ))
+        let binaries = binary_assets
+            .into_iter()
+            .map(|(platform, asset)| {
+                (
+                    platform.to_string(),
+                    DownloadableAsset {
+                        download_url: asset.browser_download_url.to_string(),
+                        size: asset.size,
+                        sha256: hashes.get(platform).cloned(),
+                    },
+                )
+            })
             .collect::<HashMap<String, DownloadableAsset>>();
 
         let (Some(assets_info), Some(assets_version)) = (&assets_info, &assets_version) else {
@@ -303,18 +308,20 @@ async fn game_version(
     };
 
     let game_release = game_releases.into_iter().rev().find_map(|release| {
-        let updater_filename =
-            format!("{}_{}", &ver_query.platform, app_config.updater_filename);
-    
+        let updater_filename = format!("{}_{}", &ver_query.platform, app_config.updater_filename);
+
         let updater_release = updater_releases.get(&updater_filename)?;
 
-        release.binaries.get(&ver_query.platform).map(|binaries| GameVersion {
-            assets: release.assets,
-            assets_version: release.assets_version.to_string(),
-            binaries: binaries.clone(),
-            updater: updater_release.clone(),
-            version: release.version.to_string(),
-        })
+        release
+            .binaries
+            .get(&ver_query.platform)
+            .map(|binaries| GameVersion {
+                assets: release.assets,
+                assets_version: release.assets_version.to_string(),
+                binaries: binaries.clone(),
+                updater: updater_release.clone(),
+                version: release.version.to_string(),
+            })
     });
 
     match game_release {
