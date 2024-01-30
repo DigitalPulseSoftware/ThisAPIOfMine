@@ -45,16 +45,27 @@ async fn game_version(
     let mut cache = cache.lock().unwrap();
 
     // TODO: remove .cloned
-    let Ok(CachedReleased::Updater(updater_releases)) = cache.try_get_or_set_with("updater_releases", || async {
-        fetcher.get_updater_releases().await.map(CachedReleased::Updater)
-    }).await.cloned() else {
+    let Ok(CachedReleased::Updater(updater_releases)) = cache
+        .try_get_or_set_with("latest_updater_release", || async {
+            fetcher
+                .get_latest_updater_release()
+                .await
+                .map(CachedReleased::Updater)
+        })
+        .await
+        .cloned()
+    else {
         return HttpResponse::InternalServerError().finish();
     };
 
     // TODO: remove .cloned
-    let Ok(CachedReleased::Game(game_releases)) = cache.try_get_or_set_with("game_releases", || async {
-        fetcher.get_game_releases().await.map(CachedReleased::Game)
-    }).await.cloned() else {
+    let Ok(CachedReleased::Game(game_releases)) = cache
+        .try_get_or_set_with("game_releases", || async {
+            fetcher.get_game_releases().await.map(CachedReleased::Game)
+        })
+        .await
+        .cloned()
+    else {
         return HttpResponse::InternalServerError().finish();
     };
 
