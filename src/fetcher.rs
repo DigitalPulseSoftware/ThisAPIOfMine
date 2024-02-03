@@ -56,19 +56,16 @@ impl Fetcher {
             .send()
             .await?;
 
-        let versions_released = releases
+        let mut versions_released = releases
             .into_iter()
             .filter(|r| !r.prerelease)
             .filter_map(|r| Version::parse(&r.tag_name).ok().map(|v| (v, r)));
 
-        let mut latest_assets = None;
-
-        let mut peekable_releases = versions_released.clone().peekable();
-        let Some((latest_version, latest_release)) = peekable_releases.peek().cloned() else {
+        let Some((latest_version, latest_release)) = versions_released.next() else {
             return Err(FetcherError::NoReleaseFound);
         };
 
-        let binaries = self
+        let mut binaries = self
             .get_assets_and_checksums(&latest_release.assets)
             .await
             .map(|(mut asset, checksum)| {
@@ -82,21 +79,31 @@ impl Fetcher {
             })
             .collect::<Result<Assets>>()?;
 
-        'outer: for (version, release) in versions_released {
-            for asset in release.assets {
-                if remove_game_suffix(asset.name.as_str()) == "assets" {
-                    let mut asset = Asset::from(&asset);
-                    asset.checksum = match self.checksum_fetcher.resolve(&asset).await {
-                        Ok(checksum) => Some(checksum),
-                        Err(FetcherError::ReqwestError(_)) => None,
-                        Err(err) => return Err(err),
-                    };
+        let latest_assets = match binaries.remove("assets") {
+            Some(asset) => Some((latest_version.clone(), asset)),
+            None => 'blk: {
+                let versions_assets = versions_released.flat_map(|(version, release)| {
+                    release
+                        .assets
+                        .into_iter()
+                        .map(move |asset| (version.clone(), asset))
+                });
+                for (version, asset) in versions_assets {
+                    if remove_game_suffix(asset.name.as_str()) == "assets" {
+                        let mut asset = Asset::from(&asset);
+                        asset.checksum = match self.checksum_fetcher.resolve(&asset).await {
+                            Ok(checksum) => Some(checksum),
+                            Err(FetcherError::ReqwestError(_)) => None,
+                            Err(err) => return Err(err),
+                        };
 
-                    latest_assets = Some((version.clone(), asset));
-                    break 'outer;
+                        break 'blk Some((version, asset));
+                    }
                 }
+
+                None
             }
-        }
+        };
 
         match latest_assets {
             Some((assets_version, assets)) => Ok(GameRelease {
