@@ -7,24 +7,25 @@ edition = "2021"
 
 [dependencies]
 actix-governor = "0.5"
-actix-web = "4.8"
+actix-web = "4.9"
 base64 = "0.22"
-cached = { version = "0.52", features = ["async"] }
+cached = { version = "0.53", features = ["async"] }
 chacha20poly1305 = { version = "0.10", features = ["std"] }
 confy = "0.6"
 deadpool-postgres = "0.14"
 deku = "0.17"
 env_logger = "0.11"
 futures = "0.3"
+jsonwebtoken = "9.3"
 log = "0.4"
-octocrab = "0.38"
+octocrab = "0.39"
 rand_core = "0.6"
 reqwest = { version = "0.12", features = ["charset", "http2", "macos-system-configuration", "rustls-tls"], default-features = false }
 secure-string = { version = "0.3", features = ["serde"] }
 semver = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_with = { version = "3.9", features = ["base64", "time_0_3"] }
-tokio = "1.38"
+tokio = "1.39"
 tokio-postgres = { version = "0.7", features = ["with-uuid-1"] }
 url = "2.5"
 uuid = { version = "1.10", features = ["v4", "macro-diagnostics", "serde"] }

@@ -24,12 +24,16 @@ pub struct ApiConfig {
     pub db_database: String,
     pub player_nickname_maxlength: usize,
     pub player_allow_non_ascii: bool,
-    pub game_api_token: String,
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub game_api_access_token_duration: Duration,
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub game_api_refresh_token_duration: Duration,
+    pub game_api_secret: SecureString,
     pub game_api_url: String,
     pub game_server_address: String,
     pub game_server_port: u16,
     #[serde_as(as = "DurationSeconds<u64>")]
-    pub game_api_token_duration: Duration,
+    pub connection_token_duration: Duration,
     #[serde_as(as = "Base64")]
     pub connection_token_key: [u8; 32],
 }
@@ -51,11 +55,13 @@ impl Default for ApiConfig {
             db_database: "tsom_db".to_string(),
             player_nickname_maxlength: 16,
             player_allow_non_ascii: false,
-            game_api_token: "".to_string(),
-            game_api_url: "http://localhost".to_string(),
+            game_api_access_token_duration: Duration::from_secs(25 * 60),
+            game_api_refresh_token_duration: Duration::from_secs(30 * 60),
+            game_api_secret: "secret".into(),
+            game_api_url: "http://localhost/game_server".to_string(),
             game_server_address: "localhost".to_string(),
             game_server_port: 29536,
-            game_api_token_duration: Duration::from_secs(5 * 60),
+            connection_token_duration: Duration::from_secs(5 * 60),
             connection_token_key: std::array::from_fn(|i| i as u8), // <=> [0, 1, .., 31]
         }
     }

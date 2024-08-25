@@ -114,6 +114,9 @@ async fn main() -> Result<(), std::io::Error> {
             .service(routes::version::game_version)
             .service(routes::players::auth)
             .service(routes::connection::game_connect)
+            .service(routes::game_server::game_server_refresh_token)
+            .service(routes::game_server::game_server_player_ship_get)
+            .service(routes::game_server::game_server_player_ship_patch)
             .service(
                 web::scope("")
                     .wrap(Governor::new(&player_create_governor_conf))
