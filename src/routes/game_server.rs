@@ -13,58 +13,54 @@ fn validate_token(
     config: &ApiConfig,
     token_type: &str,
 ) -> Result<GameDataToken, RouteError> {
-    let jwt: &str = match req.headers().get(actix_web::http::header::AUTHORIZATION) {
-        Some(value) => match value.to_str() {
-            Ok(str) => match str.strip_prefix("Bearer ") {
-                Some(str) => str,
-                None => {
-                    return Err(RouteError::InvalidRequest(RequestError::new(
-                        ErrorCode::InvalidToken,
-                        "invalid token".into(),
-                    )))
-                }
-            },
-            Err(err) => {
-                log::error!("Token error, failed to transform to string: {}", err);
-                return Err(RouteError::InvalidRequest(RequestError::new(
-                    ErrorCode::InvalidToken,
-                    "invalid token".into(),
-                )));
-            }
-        },
-        None => {
-            return Err(RouteError::InvalidRequest(RequestError::new(
-                ErrorCode::InvalidToken,
-                "missing token".into(),
-            )))
-        }
-    };
+    let header = req
+        .headers()
+        .get(actix_web::http::header::AUTHORIZATION)
+        .ok_or(RouteError::InvalidRequest(RequestError::new(
+            ErrorCode::InvalidToken(None),
+            "Missing token".to_string(),
+        )))?;
+
+    let jwt = header
+        .to_str()
+        .ok()
+        .map(|str| str.strip_prefix("Bearer "))
+        .flatten()
+        .ok_or_else(|| {
+            log::error!("Token error, failed to transform AUTHORIZATION header to a string");
+            RouteError::InvalidRequest(RequestError::new(
+                ErrorCode::InvalidToken(None),
+                "Invalid token".into(),
+            ))
+        })?;
 
     let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
     validation.set_required_spec_claims(&["exp", "iat", "sub"]);
 
-    match decode::<GameDataToken>(
-        &jwt,
+    let token = decode::<GameDataToken>(
+        jwt,
         &DecodingKey::from_secret(config.game_api_secret.unsecure().as_bytes()),
         &validation,
-    ) {
-        Ok(token) => {
-            if token.claims.sub != token_type {
-                return Err(RouteError::InvalidRequest(RequestError::new(
-                    ErrorCode::InvalidToken,
-                    format!("Expected {} token", token_type),
-                )));
-            }
+    )
+    .map_err(|err| {
+        RouteError::InvalidRequest(RequestError::new(
+            ErrorCode::InvalidToken(Some(err.to_string())),
+            "Invalid token".to_string(),
+        ))
+    })?;
 
-            Ok(token.claims)
-        }
-        Err(err) => {
-            return Err(RouteError::InvalidRequest(RequestError::new(
-                ErrorCode::InvalidToken,
-                "Invalid token".to_string(),
-            )));
-        }
+    if token.claims.sub != token_type {
+        log::error!(
+            "Expected {token_type} token but received {}",
+            token.claims.sub
+        );
+        return Err(RouteError::InvalidRequest(RequestError::new(
+            ErrorCode::InvalidToken(None),
+            format!("Expected {token_type} token"),
+        )));
     }
+
+    Ok(token.claims)
 }
 
 #[derive(Serialize)]
@@ -75,7 +71,7 @@ struct RefreshTokenResponse {
 }
 
 #[post("/game_server/v1/refresh")]
-async fn game_server_refresh_token(
+async fn refresh_access_token(
     req: HttpRequest,
     config: web::Data<ApiConfig>,
 ) -> Result<impl Responder, RouteError> {
@@ -96,14 +92,12 @@ async fn game_server_refresh_token(
         &Header::default(),
         &access_token,
         &EncodingKey::from_secret(config.game_api_secret.unsecure().as_bytes()),
-    )
-    .unwrap();
+    )?;
     let refresh_token_jwt = jsonwebtoken::encode(
         &Header::default(),
         &refresh_token,
         &EncodingKey::from_secret(config.game_api_secret.unsecure().as_bytes()),
-    )
-    .unwrap();
+    )?;
 
     Ok(HttpResponse::Ok().json(RefreshTokenResponse {
         access_token: access_token_jwt,
@@ -118,7 +112,7 @@ struct GetShipResponse {
 }
 
 #[get("/game_server/v1/player_ship/{ship_slot}")]
-async fn game_server_player_ship_get(
+async fn player_ship_get(
     req: HttpRequest,
     config: web::Data<ApiConfig>,
     path: web::Path<i32>,
@@ -152,7 +146,7 @@ struct ShipPatchParams {
 }
 
 #[patch("/game_server/v1/player_ship/{ship_slot}")]
-async fn game_server_player_ship_patch(
+async fn player_ship_patch(
     req: HttpRequest,
     path: web::Path<i32>,
     params: web::Json<ShipPatchParams>,

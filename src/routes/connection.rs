@@ -70,26 +70,24 @@ async fn game_connect(
         &Header::default(),
         &refresh_token,
         &EncodingKey::from_secret(config.game_api_secret.unsecure().as_bytes()),
-    )
-    .unwrap();
+    )?;
 
     let private_token = PrivateConnectionToken::new(
         config.game_api_url.as_str(),
-        &refresh_token_jwt,
+        refresh_token_jwt.as_str(),
         player_data,
     );
 
-    let Ok(token) = ConnectionToken::generate(
+    let token = ConnectionToken::generate(
         config.connection_token_key.into(),
         config.connection_token_duration,
         server_address,
         private_token,
-    ) else {
-        return Err(RouteError::ServerError(
-            ErrorCause::Internal,
-            ErrorCode::TokenGenerationFailed,
-        ));
-    };
+    )
+    .map_err(|_| RouteError::ServerError(
+        ErrorCause::Internal,
+        ErrorCode::TokenGenerationFailed,
+    ))?;
 
     Ok(HttpResponse::Ok().json(token))
 }
