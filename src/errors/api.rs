@@ -2,6 +2,7 @@ use actix_web::body::BoxBody;
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, HttpResponseBuilder, ResponseError};
 use serde::{Serialize, Serializer};
+use std::borrow::Cow;
 use std::fmt;
 
 #[derive(Debug)]
@@ -21,8 +22,9 @@ pub enum ErrorCode {
 
     AuthenticationInvalidToken,
     EmptyToken,
-    InvalidToken,
+    InvalidToken(Option<String>),
     TokenGenerationFailed,
+    JWTAccident(jsonwebtoken::errors::Error),
 
     External(String),
     Internal,
@@ -47,7 +49,7 @@ pub enum RouteError {
 }
 
 impl ErrorCode {
-    pub fn as_str(&self) -> &str {
+    fn as_str(&self) -> &str {
         match self {
             Self::FetchUpdaterRelease => "fetch_updater_release",
             Self::FetchGameRelease => "fetch_game_release",
@@ -58,11 +60,22 @@ impl ErrorCode {
 
             Self::AuthenticationInvalidToken => "authentication_invalid_token",
             Self::EmptyToken => "empty_token",
-            Self::InvalidToken => "invalid_token",
+            Self::InvalidToken(_) => "invalid_token",
             Self::TokenGenerationFailed => "token_generation_failed",
+
+            Self::JWTAccident(_) => "jwt_accident",
 
             Self::External(str) => str.as_str(),
             Self::Internal => "internal",
+        }
+    }
+
+    fn extra_info(&self) -> Option<Cow<str>> {
+        match self {
+            Self::JWTAccident(error) => Some(Cow::Owned(error.to_string())),
+            Self::InvalidToken(extra) => extra.as_deref().map(Cow::Borrowed),
+
+            _ => None,
         }
     }
 }
@@ -105,9 +118,13 @@ impl ResponseError for RouteError {
         match self {
             Self::ServerError(cause, err_code) => {
                 log::error!("{cause:?} error: {}", err_code.as_str());
+                if let Some(extra) = err_code.extra_info() {
+                    log::error!("{} extra: {extra}", err_code.as_str());
+                }
+
                 response.json(RequestError {
                     err_code: match err_code {
-                        ErrorCode::External(_) => ErrorCode::Internal,
+                        ErrorCode::External(_) | ErrorCode::JWTAccident(_) => ErrorCode::Internal,
                         err_code => err_code.clone(),
                     },
                     err_desc: match err_code {
@@ -119,7 +136,11 @@ impl ResponseError for RouteError {
                 })
             }
             Self::InvalidRequest(err) => {
-                log::error!("{:?} error: {}", err.err_code, err.err_desc);
+                log::error!("{:?} error: {}", err.err_code.as_str(), err.err_desc);
+                if let Some(extra) = err.err_code.extra_info() {
+                    log::error!("{} extra: {extra}", err.err_code.as_str());
+                }
+
                 response.json(err)
             }
             Self::NotFoundPlatform(err) => {
@@ -166,5 +187,12 @@ error_from! { transform deadpool_postgres::PoolError, RouteError, |value| {
     RouteError::ServerError(
         ErrorCause::Database,
         ErrorCode::External(value.to_string())
+    )
+} }
+
+error_from! { transform jsonwebtoken::errors::Error, RouteError, |value| {
+    RouteError::ServerError(
+        ErrorCause::Internal,
+        ErrorCode::JWTAccident(value)
     )
 } }
