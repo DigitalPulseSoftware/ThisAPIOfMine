@@ -1,7 +1,6 @@
 use actix_web::{get, patch, post, web, HttpRequest, HttpResponse, Responder};
 use jsonwebtoken::{decode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tokio_postgres::types::Type;
 
 use crate::data::game_data_token::GameDataToken;
