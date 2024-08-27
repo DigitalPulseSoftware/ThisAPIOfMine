@@ -1,6 +1,7 @@
 use actix_web::{get, patch, post, web, HttpRequest, HttpResponse, Responder};
 use jsonwebtoken::{decode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tokio_postgres::types::Type;
 
 use crate::data::game_data_token::GameDataToken;
@@ -81,10 +82,12 @@ async fn game_server_refresh_token(
     let refresh_token = validate_token(&req, &config, "refresh")?;
 
     let access_token = GameDataToken::new_access(
+        refresh_token.player_db_id,
         refresh_token.player_uuid,
         config.game_api_access_token_duration,
     );
     let refresh_token = GameDataToken::new_refresh(
+        refresh_token.player_db_id,
         refresh_token.player_uuid,
         config.game_api_refresh_token_duration,
     );
@@ -111,25 +114,40 @@ async fn game_server_refresh_token(
 
 #[derive(Serialize)]
 struct GetShipResponse {
-    ship_data: String,
+    ship_data: serde_json::Value,
 }
 
 #[get("/game_server/v1/player_ship/{ship_slot}")]
 async fn game_server_player_ship_get(
     req: HttpRequest,
     config: web::Data<ApiConfig>,
-    path: web::Path<u32>,
+    path: web::Path<i32>,
+    pg_pool: web::Data<deadpool_postgres::Pool>,
 ) -> Result<impl Responder, RouteError> {
-    let refresh_token = validate_token(&req, &config, "access")?;
+    let access_token = validate_token(&req, &config, "access")?;
+
+    let pg_client = pg_pool.get().await?;
+    let get_player_ship = pg_client
+        .prepare_typed_cached(
+            "SELECT data FROM player_ships WHERE player_id = $1 AND slot = $2",
+            &[Type::INT4, Type::INT4],
+        )
+        .await?;
+
+    let row = pg_client
+        .query_one(&get_player_ship, &[&access_token.player_db_id, &*path])
+        .await?;
+
+    let ship_data = row.get(0);
 
     Ok(HttpResponse::Ok().json(GetShipResponse {
-        ship_data: format!("Hello world #{}", path),
+        ship_data,
     }))
 }
 
 #[derive(Deserialize)]
 struct ShipPatchParams {
-    data: String,
+    data: serde_json::Value,
 }
 
 #[patch("/game_server/v1/player_ship/{ship_slot}")]
@@ -140,30 +158,22 @@ async fn game_server_player_ship_patch(
     config: web::Data<ApiConfig>,
     pg_pool: web::Data<deadpool_postgres::Pool>,
 ) -> Result<impl Responder, RouteError> {
-    let refresh_token = validate_token(&req, &config, "access")?;
+    let access_token = validate_token(&req, &config, "access")?;
 
     let pg_client = pg_pool.get().await?;
-    let find_player_id = pg_client
-        .prepare_typed_cached("SELECT id FROM players WHERE uuid = $1", &[Type::UUID])
-        .await?;
-
     let insert_player_ship = pg_client
         .prepare_typed_cached(
-            "INSERT INTO player_ships(player_id, slot, data) VALUES($1, $2, $3::json) ON CONFLICT(player_id, slot) DO UPDATE SET data = EXCLUDED.data",
-            &[Type::INT4, Type::INT4, Type::TEXT],
+            "INSERT INTO player_ships(player_id, slot, data) VALUES($1, $2, $3) ON CONFLICT(player_id, slot) DO UPDATE SET data = EXCLUDED.data",
+            &[Type::INT4, Type::INT4, Type::JSONB],
         )
         .await?;
 
-    let player_id_result = pg_client
-        .query_one(&find_player_id, &[&refresh_token.player_uuid])
-        .await?;
-    let player_id: i32 = player_id_result.get(0);
-
     pg_client
-        .execute(&insert_player_ship, &[&player_id, &*path, &params.data])
+        .execute(
+            &insert_player_ship,
+            &[&access_token.player_db_id, &*path, &params.data],
+        )
         .await?;
 
-    Ok(HttpResponse::Ok().json(GetShipResponse {
-        ship_data: format!("Hello world #{}", path),
-    }))
+    Ok(HttpResponse::Ok().finish())
 }
