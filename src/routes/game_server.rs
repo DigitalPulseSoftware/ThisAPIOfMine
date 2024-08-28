@@ -135,14 +135,15 @@ async fn game_server_player_ship_get(
         .await?;
 
     let row = pg_client
-        .query_one(&get_player_ship, &[&access_token.player_db_id, &*path])
+        .query_opt(&get_player_ship, &[&access_token.player_db_id, &*path])
         .await?;
 
-    let ship_data = row.get(0);
-
-    Ok(HttpResponse::Ok().json(GetShipResponse {
-        ship_data,
-    }))
+    Ok(match row {
+        Some(row) => HttpResponse::Ok().json(GetShipResponse {
+            ship_data: row.get(0),
+        }),
+        None => HttpResponse::NotFound().finish()
+    })
 }
 
 #[derive(Deserialize)]
