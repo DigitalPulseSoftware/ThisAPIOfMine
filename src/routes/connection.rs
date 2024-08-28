@@ -1,12 +1,14 @@
 use actix_web::{post, web, HttpResponse, Responder};
 use deadpool_postgres::tokio_postgres::types::Type;
 use futures::{StreamExt, TryStreamExt};
+use jsonwebtoken::{EncodingKey, Header};
 use serde::Deserialize;
 use tokio_postgres::Row;
 use uuid::Uuid;
 
 use crate::config::ApiConfig;
 use crate::data::connection_token::{ConnectionToken, PrivateConnectionToken, ServerAddress};
+use crate::data::game_data_token::GameDataToken;
 use crate::data::player_data::PlayerData;
 use crate::errors::api::{ErrorCause, ErrorCode, RequestError, RouteError};
 use crate::routes::players::validate_player_token;
@@ -62,14 +64,24 @@ async fn game_connect(
     let server_address =
         ServerAddress::new(config.game_server_address.as_str(), config.game_server_port);
 
+    let refresh_token =
+        GameDataToken::new_refresh(player_id, uuid, config.game_api_refresh_token_duration);
+    let refresh_token_jwt = jsonwebtoken::encode(
+        &Header::default(),
+        &refresh_token,
+        &EncodingKey::from_secret(config.game_api_secret.unsecure().as_bytes()),
+    )
+    .unwrap();
+
     let private_token = PrivateConnectionToken::new(
         config.game_api_url.as_str(),
-        config.game_api_token.as_str(),
+        &refresh_token_jwt,
         player_data,
     );
+
     let Ok(token) = ConnectionToken::generate(
         config.connection_token_key.into(),
-        config.game_api_token_duration,
+        config.connection_token_duration,
         server_address,
         private_token,
     ) else {

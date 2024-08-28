@@ -14,10 +14,12 @@ player_nickname_maxlength = 16
 player_allow_non_ascii = false
 
 connection_token_key = "123456"
+connection_token_duration = 300 # duration in seconds
 
-game_api_url = "http://localhost:14770"
-game_api_token = "123456"
-game_api_token_duration = 300 # duration in seconds
+game_api_access_token_duration = 1500 # duration in seconds
+game_api_refresh_token_duration = 1800 # duration in seconds
+game_api_secret = "654321"
+game_api_url = "http://localhost:14770/game_server"
 
 game_server_address = "::1"
 game_server_port = 29536

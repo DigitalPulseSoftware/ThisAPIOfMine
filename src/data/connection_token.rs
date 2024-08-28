@@ -111,17 +111,17 @@ impl<'a> ConnectionToken<'a> {
 #[derive(Debug, DekuWrite)]
 #[deku(endian = "little")]
 pub struct PrivateConnectionToken<'s> {
-    #[deku(writer = "deku_helper::write_str(deku::writer, self.api_token)")]
-    api_token: &'s str,
+    #[deku(writer = "deku_helper::write_str(deku::writer, self.refresh_token)")]
+    refresh_token: &'s str,
     #[deku(writer = "deku_helper::write_str(deku::writer, self.api_url)")]
     api_url: &'s str,
     player_data: PlayerData,
 }
 
 impl<'s> PrivateConnectionToken<'s> {
-    pub fn new(api_url: &'s str, api_token: &'s str, player_data: PlayerData) -> Self {
+    pub fn new(api_url: &'s str, refresh_token: &'s str, player_data: PlayerData) -> Self {
         Self {
-            api_token,
+            refresh_token,
             api_url,
             player_data,
         }

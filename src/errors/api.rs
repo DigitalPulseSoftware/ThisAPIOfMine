@@ -21,6 +21,7 @@ pub enum ErrorCode {
 
     AuthenticationInvalidToken,
     EmptyToken,
+    InvalidToken,
     TokenGenerationFailed,
 
     External(String),
@@ -57,6 +58,7 @@ impl ErrorCode {
 
             Self::AuthenticationInvalidToken => "authentication_invalid_token",
             Self::EmptyToken => "empty_token",
+            Self::InvalidToken => "invalid_token",
             Self::TokenGenerationFailed => "token_generation_failed",
 
             Self::External(str) => str.as_str(),
