@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-taom-database-macro = { path = "../taom-database-macro"}
 deadpool-postgres = "0.14"
+futures = "0.3"
+taom-database-macro = { path = "../taom-database-macro"}
 tokio-postgres = { version = "0.7", features = ["with-serde_json-1", "with-uuid-1"] }

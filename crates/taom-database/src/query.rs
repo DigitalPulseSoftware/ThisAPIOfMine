@@ -1,5 +1,8 @@
 use tokio_postgres::types::Type;
 
+/// Representation of sql query,
+/// store the query string and the types of all argument like a big pointer.
+#[derive(Clone)]
 pub struct Query<'q> (&'q str, &'q [Type]);
 
 impl<'q> Query<'q> {
