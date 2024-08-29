@@ -157,7 +157,7 @@ async fn player_ship_patch(
     let pg_client = pg_pool.get().await?;
     let insert_player_ship = pg_client
         .prepare_typed_cached(
-            "INSERT INTO player_ships(player_id, slot, data) VALUES($1, $2, $3) ON CONFLICT(player_id, slot) DO UPDATE SET data = EXCLUDED.data",
+            "INSERT INTO player_ships(player_id, slot, last_update, data) VALUES($1, $2, NOW(), $3) ON CONFLICT(player_id, slot) DO UPDATE SET last_update = NOW(), data = EXCLUDED.data",
             &[Type::INT4, Type::INT4, Type::JSONB],
         )
         .await?;
