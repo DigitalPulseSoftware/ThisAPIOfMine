@@ -38,7 +38,6 @@ impl GameDataToken {
     }
 }
 
-#[cfg(debug_assertions)]
 fn valid_token_type(tt: &str) -> bool {
     tt == "access" || tt == "refresh"
 }
