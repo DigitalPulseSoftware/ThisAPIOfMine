@@ -72,13 +72,13 @@ async fn create(
 
     // let transaction = pg_client.transaction().await?;
     let player_id = QUERIES
-        .prepare::<i32>("create-player")
-        .query_single(&pg_client, [dynamic(&uuid), &nickname])
+        .prepare::<i32>("create-player", &pg_client)
+        .query_single([dynamic(&uuid), &nickname])
         .await?;
 
     QUERIES
-        .prepare::<()>("create-token")
-        .execute(&pg_client, [dynamic(&token), &player_id])
+        .prepare::<()>("create-token", &pg_client)
+        .execute([dynamic(&token), &player_id])
         .await?;
     // transaction.commit().await?;
 
@@ -105,8 +105,8 @@ async fn auth(
     let player_id = validate_player_token(&pg_client, &params.token).await?;
 
     let auth_response = QUERIES
-        .prepare::<AuthenticationResponse>("find-play-info")
-        .query_one(&pg_client, [dynamic(&player_id)])
+        .prepare::<AuthenticationResponse>("find-play-info", &pg_client)
+        .query_one([dynamic(&player_id)])
         .await?
         .ok_or(RouteError::InvalidRequest(RequestError::new(
             ErrorCode::AuthenticationInvalidToken,
@@ -138,8 +138,8 @@ pub async fn validate_player_token(
     }
 
     let player_id = QUERIES
-        .prepare::<i32>("find-token")
-        .query_one(pg_client, [dynamic(&token)])
+        .prepare::<i32>("find-token", pg_client)
+        .query_one([dynamic(&token)])
         .await?
         .ok_or(RouteError::InvalidRequest(RequestError::new(
             ErrorCode::AuthenticationInvalidToken,
@@ -151,8 +151,8 @@ pub async fn validate_player_token(
 
 async fn update_player_connection(pg_client: &deadpool_postgres::Client, player_id: i32) {
     if let Err(err) = QUERIES
-        .prepare::<()>("update-player-connection")
-        .execute(pg_client, [dynamic(&player_id)])
+        .prepare::<()>("update-player-connection", pg_client)
+        .execute([dynamic(&player_id)])
         .await
     {
         log::error!("Failed to update player {player_id} connection time: {err}");

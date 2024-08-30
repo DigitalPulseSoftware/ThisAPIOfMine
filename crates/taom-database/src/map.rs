@@ -1,3 +1,4 @@
+use deadpool_postgres::Client;
 use tokio_postgres::Row;
 
 use crate::prepare::Prepare;
@@ -14,14 +15,14 @@ impl<K: Eq, const N: usize> ConstQueryMap<K, N> {
         Self(queries)
     }
 
-    pub fn prepare<R: FromRow = Row>(&self, k: K) -> Prepare<R> {
-        self.try_prepare::<R>(k).expect("item should exist")
+    pub fn prepare<'c, R: FromRow = Row>(&self, k: K, client: &'c Client) -> Prepare<'c, R> {
+        self.try_prepare::<R>(k, client).expect("item should exist")
     }
 
-    pub fn try_prepare<R: FromRow = Row>(&self, k: K) -> Option<Prepare<R>> {
+    pub fn try_prepare<'c, R: FromRow = Row>(&self, k: K, client: &'c Client) -> Option<Prepare<'c, R>> {
         for (key, query) in &self.0 {
             if &k == key {
-                return Some(Prepare::new(query.to_owned()));
+                return Some(Prepare::new(client, query.to_owned()));
             }
         }
 

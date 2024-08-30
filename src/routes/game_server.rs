@@ -124,8 +124,8 @@ async fn player_ship_get(
     let pg_client = pg_pool.get().await?;
 
     let row = QUERIES
-        .prepare::<GetShipResponse>("get-player-ship")
-        .query_one(&pg_client, [dynamic(&access_token.player_db_id), &*path])
+        .prepare::<GetShipResponse>("get-player-ship", &pg_client)
+        .query_one([dynamic(&access_token.player_db_id), &*path])
         .await?;
 
     Ok(match row {
@@ -152,11 +152,8 @@ async fn player_ship_patch(
     let pg_client = pg_pool.get().await?;
 
     QUERIES
-        .prepare::<()>("insert-player-ship")
-        .execute(
-            &pg_client,
-            [dynamic(&access_token.player_db_id), &*path, &params.data],
-        )
+        .prepare::<()>("insert-player-ship", &pg_client)
+        .execute([dynamic(&access_token.player_db_id), &*path, &params.data])
         .await?;
 
     Ok(HttpResponse::Ok().finish())

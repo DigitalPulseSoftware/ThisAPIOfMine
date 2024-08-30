@@ -28,8 +28,8 @@ async fn game_connect(
     let player_id = validate_player_token(&pg_client, &params.token).await?;
 
     let (uuid, nickname) = QUERIES
-        .prepare::<(Uuid, String)>("find-player-info")
-        .query_one(&pg_client, [dynamic(&player_id)])
+        .prepare::<(Uuid, String)>("find-player-info", &pg_client)
+        .query_one([dynamic(&player_id)])
         .await?
         .ok_or(RouteError::InvalidRequest(RequestError::new(
             ErrorCode::AuthenticationInvalidToken,
@@ -37,8 +37,8 @@ async fn game_connect(
         )))?;
 
     let permissions: Vec<String> = QUERIES
-        .prepare::<String>("get-player-permissions")
-        .query_iter(&pg_client, [dynamic(&player_id)])
+        .prepare::<String>("get-player-permissions", &pg_client)
+        .query_iter([dynamic(&player_id)])
         .await?
         .try_collect()
         .await?;
