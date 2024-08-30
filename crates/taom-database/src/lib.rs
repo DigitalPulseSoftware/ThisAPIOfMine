@@ -7,6 +7,8 @@ pub use map::ConstQueryMap;
 pub use query::Query;
 use tokio_postgres::types::ToSql;
 
+pub mod config;
+pub mod error;
 mod from_row;
 mod map;
 mod prepare;
