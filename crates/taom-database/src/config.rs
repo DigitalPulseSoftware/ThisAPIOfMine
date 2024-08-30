@@ -10,7 +10,7 @@ pub struct ConfigBuilder<'b> {
     user: Option<&'b str>,
     database: Option<&'b str>,
     recycling_method: RecyclingMethod,
-    runtime: Option<Runtime>
+    runtime: Option<Runtime>,
 }
 
 impl<'b> ConfigBuilder<'b> {
@@ -48,8 +48,10 @@ impl<'b> ConfigBuilder<'b> {
         pg_config.manager = Some(ManagerConfig {
             recycling_method: self.recycling_method,
         });
-        
-        let pool = pg_config.create_pool(self.runtime, NoTls).map_err(|_| PoolError::Creation)?;
+
+        let pool = pg_config
+            .create_pool(self.runtime, NoTls)
+            .map_err(|_| PoolError::Creation)?;
 
         // Try to connect to database to test if the database exist
         let _ = pool.get().await.map_err(|_| PoolError::Connection)?;

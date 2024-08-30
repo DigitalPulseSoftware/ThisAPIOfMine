@@ -9,13 +9,19 @@ macro_rules! fail {
 macro_rules! try_set {
     (option : $i:expr, $v:expr, $t:expr) => {
         match $i {
-            None => { $i = Some($v); Ok(()) },
+            None => {
+                $i = Some($v);
+                Ok(())
+            }
             Some(_) => fail!($t, "duplicate attribute"),
         }
     };
     (bool : $i:expr, $t:expr) => {
         match $i {
-            false => { $i = true; Ok(()) },
+            false => {
+                $i = true;
+                Ok(())
+            }
             true => fail!($t, "duplicate attribute"),
         }
     };
@@ -30,7 +36,7 @@ pub(crate) struct DbRowAttribute {
 pub fn parse_db_row_attr(attrs: &[Attribute]) -> Result<DbRowAttribute> {
     let mut result_attr = DbRowAttribute::default();
 
-    for attr in  attrs.iter().filter(|attr| attr.path().is_ident("db_row")) {
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("db_row")) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("rename") {
                 meta.input.parse::<Token![=]>()?;
@@ -41,7 +47,7 @@ pub fn parse_db_row_attr(attrs: &[Attribute]) -> Result<DbRowAttribute> {
             } else {
                 let msg = match meta.path.get_ident() {
                     Some(ident) => format!("Unexpected attribute `{}` in db_row", ident),
-                    None => "Unexpected attribute".to_string()
+                    None => "Unexpected attribute".to_string(),
                 };
                 fail!(meta.path, msg)
             }

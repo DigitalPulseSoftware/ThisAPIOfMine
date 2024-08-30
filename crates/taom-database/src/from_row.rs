@@ -36,7 +36,6 @@ macro_rules! impl_from_row_for_tuple {
     };
 }
 
-
 impl_from_row_for_tuple! {}
 impl_from_row_for_tuple! {
     0 -> T1;

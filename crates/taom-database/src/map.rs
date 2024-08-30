@@ -16,8 +16,8 @@ impl<K: Eq, const N: usize> ConstQueryMap<K, N> {
 
     pub fn prepare<R: FromRow = Row>(&self, k: K) -> Prepare<R> {
         self.try_prepare::<R>(k).expect("item should exist")
-    } 
-    
+    }
+
     pub fn try_prepare<R: FromRow = Row>(&self, k: K) -> Option<Prepare<R>> {
         for (key, query) in &self.0 {
             if &k == key {
@@ -26,5 +26,5 @@ impl<K: Eq, const N: usize> ConstQueryMap<K, N> {
         }
 
         None
-    } 
+    }
 }

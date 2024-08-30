@@ -11,24 +11,27 @@ pub fn derive_from_row(input: TokenStream) -> TokenStream {
 
     let syn::Data::Struct(data) = input.data else {
         return TokenStream::from(
-            syn::Error::new(
-                input.ident.span(),
-                "Only structs can derive `FromRow`"
-            ).to_compile_error()
-        )
+            syn::Error::new(input.ident.span(), "Only structs can derive `FromRow`")
+                .to_compile_error(),
+        );
     };
 
     let struct_name = input.ident;
-    let fields = data.fields.iter().enumerate().map(|(i, field)| {
-        Ok(match field.ident.as_ref() {
-            Some(name) => {
-                let attr = parse_db_row_attr(field.attrs.as_slice())?;
-                let db_name = attr.rename.unwrap_or(name.to_string());
-                quote! { #name: row.try_get(#db_name)? }
-            }
-            None => quote! { row.try_get(#i)? }
+    let fields = data
+        .fields
+        .iter()
+        .enumerate()
+        .map(|(i, field)| {
+            Ok(match field.ident.as_ref() {
+                Some(name) => {
+                    let attr = parse_db_row_attr(field.attrs.as_slice())?;
+                    let db_name = attr.rename.unwrap_or(name.to_string());
+                    quote! { #name: row.try_get(#db_name)? }
+                }
+                None => quote! { row.try_get(#i)? },
+            })
         })
-    }).collect::<Result<Vec<_>>>();
+        .collect::<Result<Vec<_>>>();
 
     let fields = match fields {
         Ok(ts) => ts,
@@ -40,7 +43,7 @@ pub fn derive_from_row(input: TokenStream) -> TokenStream {
         Fields::Unnamed(_) => quote! { Self(#(#fields),*) },
         Fields::Unit => quote! { Self },
     };
-    
+
     quote! {
         #[automatically_derived]
         impl ::taom_database::FromRow for #struct_name {
@@ -48,5 +51,6 @@ pub fn derive_from_row(input: TokenStream) -> TokenStream {
                 Ok(#struct_self)
             }
         }
-    }.into()
+    }
+    .into()
 }
