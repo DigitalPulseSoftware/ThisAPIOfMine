@@ -14,6 +14,21 @@ impl FromRow for Row {
     }
 }
 
+macro_rules! impl_from_row_for_from_sql {
+    ($($type:ty),+) => {
+        $(
+            impl FromRow for $type {
+                #[inline]
+                fn from_row(row: Row) -> Result<Self, Error> {
+                    row.try_get(0)
+                }
+            }
+        )+
+    };
+}
+
+impl_from_row_for_from_sql!(i8, i16, i32, i64, String);
+
 macro_rules! impl_from_row_for_tuple {
     () => {
         impl FromRow for () {

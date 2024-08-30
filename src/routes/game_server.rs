@@ -1,9 +1,10 @@
 use actix_web::{get, patch, post, web, HttpRequest, HttpResponse, Responder};
 use jsonwebtoken::{decode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use tokio_postgres::types::Type;
+use taom_database::{dynamic, FromRow};
 
 use crate::data::game_data_token::GameDataToken;
+use crate::database::QUERIES;
 use crate::errors::api::{ErrorCode, RequestError};
 use crate::{config::ApiConfig, errors::api::RouteError};
 
@@ -105,8 +106,9 @@ async fn refresh_access_token(
     }))
 }
 
-#[derive(Serialize)]
+#[derive(FromRow, Serialize)]
 struct GetShipResponse {
+    #[db_row(rename = "data")]
     ship_data: serde_json::Value,
 }
 
@@ -120,22 +122,15 @@ async fn player_ship_get(
     let access_token = validate_token(&req, &config, "access")?;
 
     let pg_client = pg_pool.get().await?;
-    let get_player_ship = pg_client
-        .prepare_typed_cached(
-            "SELECT data FROM player_ships WHERE player_id = $1 AND slot = $2",
-            &[Type::INT4, Type::INT4],
-        )
-        .await?;
 
-    let row = pg_client
-        .query_opt(&get_player_ship, &[&access_token.player_db_id, &*path])
+    let row = QUERIES
+        .prepare::<GetShipResponse>("get-player-ship")
+        .query_one(&pg_client, [dynamic(&access_token.player_db_id), &*path])
         .await?;
 
     Ok(match row {
-        Some(row) => HttpResponse::Ok().json(GetShipResponse {
-            ship_data: row.get(0),
-        }),
-        None => HttpResponse::NotFound().finish()
+        Some(response) => HttpResponse::Ok().json(response),
+        None => HttpResponse::NotFound().finish(),
     })
 }
 
@@ -155,17 +150,12 @@ async fn player_ship_patch(
     let access_token = validate_token(&req, &config, "access")?;
 
     let pg_client = pg_pool.get().await?;
-    let insert_player_ship = pg_client
-        .prepare_typed_cached(
-            "INSERT INTO player_ships(player_id, slot, last_update, data) VALUES($1, $2, NOW(), $3) ON CONFLICT(player_id, slot) DO UPDATE SET last_update = NOW(), data = EXCLUDED.data",
-            &[Type::INT4, Type::INT4, Type::JSONB],
-        )
-        .await?;
 
-    pg_client
+    QUERIES
+        .prepare::<()>("insert-player-ship")
         .execute(
-            &insert_player_ship,
-            &[&access_token.player_db_id, &*path, &params.data],
+            &pg_client,
+            [dynamic(&access_token.player_db_id), &*path, &params.data],
         )
         .await?;
 

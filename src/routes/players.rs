@@ -1,12 +1,13 @@
 use actix_web::{post, web, HttpResponse, Responder};
-use deadpool_postgres::tokio_postgres::types::Type;
 
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
+use taom_database::{dynamic, FromRow};
 use uuid::Uuid;
 
 use crate::config::ApiConfig;
 use crate::data::token::Token;
+use crate::database::QUERIES;
 use crate::errors::api::ErrorCause;
 use crate::errors::api::{ErrorCode, RequestError, RouteError};
 
@@ -60,21 +61,7 @@ async fn create(
 
     let uuid = Uuid::new_v4();
 
-    let mut pg_client = pg_pool.get().await?;
-
-    let create_player_statement = pg_client
-        .prepare_typed_cached(
-            "INSERT INTO players(uuid, creation_time, nickname) VALUES($1, NOW(), $2) RETURNING id",
-            &[Type::UUID, Type::VARCHAR],
-        )
-        .await?;
-
-    let create_token_statement = pg_client
-        .prepare_typed_cached(
-            "INSERT INTO player_tokens(token, player_id) VALUES($1, $2)",
-            &[Type::VARCHAR, Type::INT4],
-        )
-        .await?;
+    let pg_client = pg_pool.get().await?;
 
     let Ok(token) = Token::generate(OsRng) else {
         return Err(RouteError::ServerError(
@@ -83,18 +70,17 @@ async fn create(
         ));
     };
 
-    let transaction = pg_client.transaction().await?;
-    let created_player_result = transaction
-        .query_one(&create_player_statement, &[&uuid, &nickname])
+    // let transaction = pg_client.transaction().await?;
+    let player_id = QUERIES
+        .prepare::<i32>("create-player")
+        .query_single(&pg_client, [dynamic(&uuid), &nickname])
         .await?;
 
-    let player_id: i32 = created_player_result.try_get(0)?;
-
-    transaction
-        .execute(&create_token_statement, &[&token, &player_id])
+    QUERIES
+        .prepare::<()>("create-token")
+        .execute(&pg_client, [dynamic(&token), &player_id])
         .await?;
-
-    transaction.commit().await?;
+    // transaction.commit().await?;
 
     Ok(HttpResponse::Ok().json(CreatePlayerResponse { uuid, token }))
 }
@@ -104,7 +90,7 @@ struct AuthenticationParams {
     token: String,
 }
 
-#[derive(Serialize)]
+#[derive(FromRow, Serialize)]
 struct AuthenticationResponse {
     uuid: Uuid,
     nickname: String,
@@ -118,15 +104,9 @@ async fn auth(
     let pg_client = pg_pool.get().await?;
     let player_id = validate_player_token(&pg_client, &params.token).await?;
 
-    let find_player_info = pg_client
-        .prepare_typed_cached(
-            "SELECT uuid, nickname FROM players WHERE id = $1",
-            &[Type::INT4],
-        )
-        .await?;
-
-    let player_result = pg_client
-        .query_opt(&find_player_info, &[&player_id])
+    let auth_response = QUERIES
+        .prepare::<AuthenticationResponse>("find-play-info")
+        .query_one(&pg_client, [dynamic(&player_id)])
         .await?
         .ok_or(RouteError::InvalidRequest(RequestError::new(
             ErrorCode::AuthenticationInvalidToken,
@@ -136,10 +116,7 @@ async fn auth(
     // Update last connection time in a separate task as its result won't affect the route
     tokio::spawn(async move { update_player_connection(&pg_client, player_id).await });
 
-    Ok(HttpResponse::Ok().json(AuthenticationResponse {
-        uuid: player_result.try_get(0)?,
-        nickname: player_result.try_get(1)?,
-    }))
+    Ok(HttpResponse::Ok().json(auth_response))
 }
 
 pub async fn validate_player_token(
@@ -160,39 +137,24 @@ pub async fn validate_player_token(
         )));
     }
 
-    let find_token_statement = pg_client
-        .prepare_typed_cached(
-            "SELECT player_id FROM player_tokens WHERE token = $1",
-            &[Type::VARCHAR],
-        )
-        .await?;
-
-    let token_result = pg_client
-        .query_opt(&find_token_statement, &[&token])
+    let player_id = QUERIES
+        .prepare::<i32>("find-token")
+        .query_one(pg_client, [dynamic(&token)])
         .await?
         .ok_or(RouteError::InvalidRequest(RequestError::new(
             ErrorCode::AuthenticationInvalidToken,
             format!("No player has the token '{token}'"),
         )))?;
 
-    Ok(token_result.try_get(0)?)
+    Ok(player_id)
 }
 
 async fn update_player_connection(pg_client: &deadpool_postgres::Client, player_id: i32) {
-    match pg_client
-        .prepare_typed_cached(
-            "UPDATE players SET last_connection_time = NOW() WHERE id = $1",
-            &[Type::INT4],
-        )
+    if let Err(err) = QUERIES
+        .prepare::<()>("update-player-connection")
+        .execute(pg_client, [dynamic(&player_id)])
         .await
     {
-        Ok(statement) => {
-            if let Err(err) = pg_client.execute(&statement, &[&player_id]).await {
-                log::error!("Failed to update player {player_id} connection time: {err}");
-            }
-        }
-        Err(err) => {
-            log::error!("Failed to update player {player_id} connection time (failed to prepare query): {err}");
-        }
+        log::error!("Failed to update player {player_id} connection time: {err}");
     }
 }

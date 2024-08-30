@@ -1,3 +1,4 @@
+use std::fmt;
 use tokio_postgres::types::Type;
 
 /// Representation of sql query,
@@ -22,5 +23,19 @@ impl<'q> Query<'q> {
 
     pub(crate) fn types(&self) -> &'q [Type] {
         self.1
+    }
+}
+
+impl<'q> fmt::Display for Query<'q> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self.0, f)
+    }
+}
+
+impl<'q> fmt::Debug for Query<'q> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self.0, f)
     }
 }
