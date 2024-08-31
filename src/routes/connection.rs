@@ -1,4 +1,5 @@
 use actix_web::{post, web, HttpResponse, Responder};
+use futures::future::join;
 use futures::TryStreamExt;
 use jsonwebtoken::{EncodingKey, Header};
 use serde::Deserialize;
@@ -27,23 +28,33 @@ async fn game_connect(
     let pg_client = pg_pool.get().await?;
     let player_id = validate_player_token(&pg_client, &params.token).await?;
 
-    let (uuid, nickname) = QUERIES
-        .prepare::<(Uuid, String)>("find-player-info", &pg_client)
-        .query_one([dynamic(&player_id)])
-        .await?
-        .ok_or(RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::AuthenticationInvalidToken,
-            format!("No player has the id '{player_id}'"),
-        )))?;
+    let queries = join(
+        async {
+            Ok(QUERIES
+                .prepare::<(Uuid, String)>("find-player-info", &pg_client)
+                .query_one([dynamic(&player_id)])
+                .await?
+                .ok_or(RouteError::InvalidRequest(RequestError::new(
+                    ErrorCode::AuthenticationInvalidToken,
+                    format!("No player has the id '{player_id}'"),
+                )))?)
+        },
+        async {
+            Ok(QUERIES
+                .prepare::<String>("get-player-permissions", &pg_client)
+                .query_iter([dynamic(&player_id)])
+                .await?
+                .try_collect::<Vec<String>>()
+                .await?)
+        },
+    );
 
-    let permissions: Vec<String> = QUERIES
-        .prepare::<String>("get-player-permissions", &pg_client)
-        .query_iter([dynamic(&player_id)])
-        .await?
-        .try_collect()
-        .await?;
-
-    let player_data = PlayerData::new(uuid, nickname, permissions);
+    let (uuid, player_data) = match queries.await {
+        (Ok((uuid, nickname)), Ok(permissions)) => {
+            (uuid, PlayerData::new(uuid, nickname, permissions))
+        }
+        (Err(err), _) | (_, Err(err)) => return Err(err),
+    };
 
     let server_address =
         ServerAddress::new(config.game_server_address.as_str(), config.game_server_port);

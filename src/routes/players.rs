@@ -59,10 +59,6 @@ async fn create(
         }
     }
 
-    let uuid = Uuid::new_v4();
-
-    let pg_client = pg_pool.get().await?;
-
     let Ok(token) = Token::generate(OsRng) else {
         return Err(RouteError::ServerError(
             ErrorCause::Internal,
@@ -70,7 +66,10 @@ async fn create(
         ));
     };
 
-    // let transaction = pg_client.transaction().await?;
+    let uuid = Uuid::new_v4();
+
+    let pg_client = pg_pool.get().await?;
+
     let player_id = QUERIES
         .prepare::<i32>("create-player", &pg_client)
         .query_single([dynamic(&uuid), &nickname])
@@ -80,7 +79,6 @@ async fn create(
         .prepare::<()>("create-token", &pg_client)
         .execute([dynamic(&token), &player_id])
         .await?;
-    // transaction.commit().await?;
 
     Ok(HttpResponse::Ok().json(CreatePlayerResponse { uuid, token }))
 }

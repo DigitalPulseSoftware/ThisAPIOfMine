@@ -37,7 +37,8 @@ impl<'c, R: FromRow> Prepare<'c, R> {
         P::IntoIter: ExactSizeIterator,
     {
         let statement = self.prepare().await?;
-        let result = self.client
+        let result = self
+            .client
             .query_raw(&statement, params)
             .await
             .map_err(|_| QueryError::PreparationFailed(self.query.clone()))?;
@@ -50,10 +51,7 @@ impl<'c, R: FromRow> Prepare<'c, R> {
     /// if the query has no result, it will return `Ok(None)`,
     /// and if the query result has more than one row, the first row will be
     /// stored in `Err(QueryError::HasMoreThanOneRow)`.
-    pub async fn query_one<I, P>(
-        &self,
-        params: P,
-    ) -> Result<Option<R>, QueryError<R>>
+    pub async fn query_one<I, P>(&self, params: P) -> Result<Option<R>, QueryError<R>>
     where
         I: BorrowToSql,
         P: IntoIterator<Item = I>,

@@ -3,6 +3,7 @@ pub use taom_database_macro::FromRow;
 use tokio_postgres::types::FromSql;
 use tokio_postgres::{Error, Row};
 
+/// Trait to transform a row into an object
 pub trait FromRow: Sized {
     fn from_row(row: Row) -> Result<Self, Error>;
 }
