@@ -153,8 +153,8 @@ impl ResponseError for RouteError {
 
 // to delete '$into_type:path' you need to use proc macros and further manipulation of the AST
 macro_rules! error_from {
-    (transform $from:path, $into_type:path, |$err_name:ident| $blk:block) => {
-        impl From<$from> for $into_type {
+    (transform$(<$T:ident>)? $from:path, $into_type:path, |$err_name:ident| $blk:block) => {
+        impl<$($T)?> From<$from> for $into_type {
             fn from($err_name: $from) -> Self {
                 $blk
             }
@@ -194,5 +194,12 @@ error_from! { transform jsonwebtoken::errors::Error, RouteError, |value| {
     RouteError::ServerError(
         ErrorCause::Internal,
         ErrorCode::JWTAccident(value)
+    )
+} }
+
+error_from! { transform<R> taom_database::error::QueryError<R>, RouteError, |value| {
+    RouteError::ServerError(
+        ErrorCause::Database,
+        ErrorCode::External(value.to_string())
     )
 } }

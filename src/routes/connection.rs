@@ -1,15 +1,16 @@
 use actix_web::{post, web, HttpResponse, Responder};
-use deadpool_postgres::tokio_postgres::types::Type;
-use futures::{StreamExt, TryStreamExt};
+use futures::future::join;
+use futures::TryStreamExt;
 use jsonwebtoken::{EncodingKey, Header};
 use serde::Deserialize;
-use tokio_postgres::Row;
+use taom_database::dynamic;
 use uuid::Uuid;
 
 use crate::config::ApiConfig;
 use crate::data::connection_token::{ConnectionToken, PrivateConnectionToken, ServerAddress};
 use crate::data::game_data_token::GameDataToken;
 use crate::data::player_data::PlayerData;
+use crate::database::QUERIES;
 use crate::errors::api::{ErrorCause, ErrorCode, RequestError, RouteError};
 use crate::routes::players::validate_player_token;
 
@@ -27,39 +28,33 @@ async fn game_connect(
     let pg_client = pg_pool.get().await?;
     let player_id = validate_player_token(&pg_client, &params.token).await?;
 
-    // TODO(SirLynix): to do this with only one query
-    let find_player_info = pg_client
-        .prepare_typed_cached(
-            "SELECT uuid, nickname FROM players WHERE id = $1",
-            &[Type::INT4],
-        )
-        .await?;
+    let queries = join(
+        async {
+            Ok(QUERIES
+                .prepare::<(Uuid, String)>("find-player-info", &pg_client)
+                .query_one([dynamic(&player_id)])
+                .await?
+                .ok_or(RouteError::InvalidRequest(RequestError::new(
+                    ErrorCode::AuthenticationInvalidToken,
+                    format!("No player has the id '{player_id}'"),
+                )))?)
+        },
+        async {
+            Ok(QUERIES
+                .prepare::<String>("get-player-permissions", &pg_client)
+                .query_iter([dynamic(&player_id)])
+                .await?
+                .try_collect::<Vec<String>>()
+                .await?)
+        },
+    );
 
-    let get_player_permissions = pg_client
-        .prepare_typed_cached(
-            "SELECT permission FROM player_permissions WHERE player_id = $1",
-            &[Type::INT4],
-        )
-        .await?;
-
-    let player_result = pg_client
-        .query_opt(&find_player_info, &[&player_id])
-        .await?
-        .ok_or(RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::AuthenticationInvalidToken,
-            format!("No player has the id '{player_id}'"),
-        )))?;
-
-    let uuid: Uuid = player_result.try_get(0)?;
-    let nickname: String = player_result.try_get(1)?;
-    let permissions: Vec<String> = pg_client
-        .query_raw(&get_player_permissions, &[&player_id])
-        .await?
-        .map(|row: Result<Row, tokio_postgres::Error>| row.and_then(|row| row.try_get(0)))
-        .try_collect()
-        .await?;
-
-    let player_data = PlayerData::new(uuid, nickname, permissions);
+    let (uuid, player_data) = match queries.await {
+        (Ok((uuid, nickname)), Ok(permissions)) => {
+            (uuid, PlayerData::new(uuid, nickname, permissions))
+        }
+        (Err(err), _) | (_, Err(err)) => return Err(err),
+    };
 
     let server_address =
         ServerAddress::new(config.game_server_address.as_str(), config.game_server_port);
@@ -84,10 +79,7 @@ async fn game_connect(
         server_address,
         private_token,
     )
-    .map_err(|_| RouteError::ServerError(
-        ErrorCause::Internal,
-        ErrorCode::TokenGenerationFailed,
-    ))?;
+    .map_err(|_| RouteError::ServerError(ErrorCause::Internal, ErrorCode::TokenGenerationFailed))?;
 
     Ok(HttpResponse::Ok().json(token))
 }

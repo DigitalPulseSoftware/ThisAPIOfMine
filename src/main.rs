@@ -4,8 +4,10 @@ use actix_governor::{Governor, GovernorConfig, GovernorConfigBuilder};
 use actix_web::{middleware, web, App, HttpServer};
 use cached::TimedCache;
 use confy::ConfyError;
+use deadpool_postgres::{RecyclingMethod, Runtime};
+use taom_database::config::ConfigBuilder;
+use taom_database::error::PoolError;
 use tokio::sync::Mutex;
-use tokio_postgres::NoTls;
 
 use crate::app_data::AppData;
 use crate::config::ApiConfig;
@@ -15,6 +17,7 @@ use crate::fetcher::Fetcher;
 mod app_data;
 mod config;
 mod data;
+mod database;
 mod deku_helper;
 mod errors;
 mod fetcher;
@@ -23,26 +26,6 @@ mod metaprog;
 mod routes;
 
 const CONFIG_FILE: Cow<'static, str> = Cow::Borrowed("tsom_api_config.toml");
-
-async fn setup_pg_pool(api_config: &ApiConfig) -> Result<deadpool_postgres::Pool> {
-    use deadpool_postgres::{Config, ManagerConfig, RecyclingMethod, Runtime};
-
-    let mut pg_config = Config::new();
-    pg_config.host = Some(api_config.db_host.clone());
-    pg_config.password = Some(api_config.db_password.unsecure().to_string());
-    pg_config.user = Some(api_config.db_user.clone());
-    pg_config.dbname = Some(api_config.db_database.clone());
-    pg_config.manager = Some(ManagerConfig {
-        recycling_method: RecyclingMethod::Fast,
-    });
-
-    let pool = pg_config.create_pool(Some(Runtime::Tokio1), NoTls)?;
-
-    // Try to connect to database to test if the database exist
-    let _ = pool.get().await?;
-
-    Ok(pool)
-}
 
 #[actix_web::main]
 async fn main() -> Result<(), std::io::Error> {
@@ -72,19 +55,20 @@ async fn main() -> Result<(), std::io::Error> {
     let fetcher = Fetcher::from_config(&config).unwrap();
 
     log::info!("Connection to the database");
-    let pg_pool = match setup_pg_pool(&config).await {
-        Ok(pool) => web::Data::new(pool),
-        Err(err) => {
-            use deadpool_postgres::{CreatePoolError, PoolError};
+    let pg_pool = ConfigBuilder::default()
+        .host(config.db_host.as_str())
+        .password(config.db_password.unsecure())
+        .user(config.db_user.as_str())
+        .database(config.db_database.as_str())
+        .recycling_method(RecyclingMethod::Fast)
+        .runtime(Runtime::Tokio1)
+        .build()
+        .await;
 
-            if err.is::<CreatePoolError>() {
-                panic!("an error occured during the creation of the pool")
-            } else if err.is::<PoolError>() {
-                panic!("failed to connect to database")
-            } else {
-                unreachable!()
-            }
-        }
+    let pg_pool = match pg_pool {
+        Ok(pool) => web::Data::new(pool),
+        Err(PoolError::Creation) => panic!("an error occured during the creation of the pool"),
+        Err(PoolError::Connection) => panic!("failed to connect to database"),
     };
 
     let bind_address = format!("{}:{}", config.listen_address, config.listen_port);

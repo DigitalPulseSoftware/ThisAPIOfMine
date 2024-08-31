@@ -5,6 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+members = ["crates/taom-database", "crates/taom-database-macro"]
+
 [dependencies]
 actix-governor = "0.5"
 actix-web = "4.9"
@@ -26,6 +29,7 @@ semver = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = { version = "3.9", features = ["base64", "time_0_3"] }
+taom-database = { path = "./crates/taom-database" }
 tokio = "1.39"
 tokio-postgres = { version = "0.7", features = ["with-serde_json-1", "with-uuid-1"] }
 url = "2.5"
