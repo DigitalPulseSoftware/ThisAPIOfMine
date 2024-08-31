@@ -22,13 +22,21 @@ pub fn derive_from_row(input: TokenStream) -> TokenStream {
         .iter()
         .enumerate()
         .map(|(i, field)| {
+            let attr = parse_db_row_attr(field.attrs.as_slice())?;
             Ok(match field.ident.as_ref() {
                 Some(name) => {
-                    let attr = parse_db_row_attr(field.attrs.as_slice())?;
                     let db_name = attr.rename.unwrap_or(name.to_string());
-                    quote! { #name: row.try_get(#db_name)? }
+                    match attr.default {
+                        true => quote! { #name: row.try_get(#db_name).unwrap_or_default() },
+                        false => quote! { #name: row.try_get(#db_name)? },
+                    }
                 }
-                None => quote! { row.try_get(#i)? },
+                None => match (attr.rename, attr.default) {
+                    (Some(db_name), true) => quote! { row.try_get(#db_name).unwrap_or_default() },
+                    (Some(db_name), false) => quote! { row.try_get(#db_name)? },
+                    (None, true) => quote! { row.try_get(#i).unwrap_or_default() },
+                    (None, false) => quote! { row.try_get(#i)? },
+                }
             })
         })
         .collect::<Result<Vec<_>>>();
