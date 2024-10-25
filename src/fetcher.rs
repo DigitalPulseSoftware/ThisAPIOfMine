@@ -59,14 +59,7 @@ impl Fetcher {
             .get_assets_and_checksums(&latest_release.assets, &latest_version, None)
             .await
             .map(|((platform, mut asset), sha256)| {
-                asset.sha256 = match sha256 {
-                    Ok(sha256) => Some(sha256),
-                    Err(err) => match err.is::<reqwest::Error>() {
-                        true => None,
-                        false => return Err(err),
-                    },
-                };
-
+                asset.sha256 = sha256?;
                 Ok((platform.to_string(), asset))
             })
             .collect::<Result<Assets>>()?;
@@ -76,14 +69,7 @@ impl Fetcher {
                 .get_assets_and_checksums(&release.assets, &version, Some(&binaries))
                 .await
             {
-                asset.sha256 = match sha256 {
-                    Ok(sha256) => Some(sha256),
-                    Err(err) => match err.is::<reqwest::Error>() {
-                        true => None,
-                        false => return Err(err),
-                    },
-                };
-
+                asset.sha256 = sha256?;
                 binaries.insert(platform.to_string(), asset);
             }
         }
@@ -113,14 +99,7 @@ impl Fetcher {
         self.get_assets_and_checksums(&last_release.assets, &version, None)
             .await
             .map(|((platform, mut asset), sha256)| {
-                asset.sha256 = match sha256 {
-                    Ok(sha256) => Some(sha256),
-                    Err(err) => match err.is::<reqwest::Error>() {
-                        true => None,
-                        false => return Err(err),
-                    },
-                };
-
+                asset.sha256 = sha256?;
                 Ok((platform.to_string(), asset))
             })
             .collect::<Result<Assets>>()
@@ -131,7 +110,7 @@ impl Fetcher {
         assets: A,
         version: &Version,
         binaries: Option<&Assets>,
-    ) -> impl Iterator<Item = ((&'b str, Asset), Result<String>)>
+    ) -> impl Iterator<Item = ((&'b str, Asset), Result<Option<String>>)>
     where
         A: IntoIterator<Item = &'a repos::Asset>,
     {
@@ -164,15 +143,23 @@ impl ChecksumFetcher {
         Self(reqwest::Client::new())
     }
 
-    async fn resolve(&self, asset: &Asset) -> Result<String> {
+    async fn resolve(&self, asset: &Asset) -> Result<Option<String>> {
+        // Try to get the SHA256 file
         let response = self
             .0
             .get(format!("{}.sha256", asset.download_url))
             .send()
-            .await?
-            .text()
             .await?;
-        self.parse_response(asset.name.as_str(), response.as_str())
+
+        match response.status().is_client_error() {
+            // No SHA256 found
+            true => Ok(None),
+            false => {
+                let content = response.text().await?;
+                self.parse_response(asset.name.as_str(), content.as_str())
+                    .map(Some)
+            }
+        }
     }
 
     fn parse_response(&self, asset_name: &str, response: &str) -> Result<String> {
