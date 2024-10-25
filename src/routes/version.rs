@@ -5,7 +5,8 @@ use serde::Deserialize;
 
 use crate::app_data::AppData;
 use crate::config::ApiConfig;
-use crate::errors::api::{ErrorCause, ErrorCode, PlatformError, RouteError};
+use crate::errors::api::{ErrorCause, RouteError};
+use crate::errors::codes::ServerErrorCode;
 use crate::game_data::{Assets, GameRelease, GameVersion};
 
 #[derive(Deserialize)]
@@ -30,7 +31,7 @@ async fn game_version(
     let mut cache = cache.lock().await;
 
     // TODO: remove .cloned
-    let Ok(CachedReleased::Updater(updater_release)) = cache
+    let results_updater_release = cache
         .try_get_or_set_with("latest_updater_release", || async {
             fetcher
                 .get_latest_updater_release()
@@ -38,16 +39,15 @@ async fn game_version(
                 .map(CachedReleased::Updater)
         })
         .await
-        .cloned()
-    else {
-        return Err(RouteError::ServerError(
-            ErrorCause::Internal,
-            ErrorCode::FetchUpdaterRelease,
-        ));
+        .cloned();
+    let updater_release = match results_updater_release {
+        Ok(CachedReleased::Updater(updater_release)) => updater_release,
+        Ok(CachedReleased::Game(_)) => unreachable!(),
+        Err(err) => return Err(RouteError::ServerError(ErrorCause::Internal, err.into())),
     };
 
     // TODO: remove .cloned
-    let Ok(CachedReleased::Game(game_release)) = cache
+    let results_game_release = cache
         .try_get_or_set_with("latest_game_release", || async {
             fetcher
                 .get_latest_game_release()
@@ -55,12 +55,11 @@ async fn game_version(
                 .map(CachedReleased::Game)
         })
         .await
-        .cloned()
-    else {
-        return Err(RouteError::ServerError(
-            ErrorCause::Internal,
-            ErrorCode::FetchGameRelease,
-        ));
+        .cloned();
+    let game_release = match results_game_release {
+        Ok(CachedReleased::Game(game_release)) => game_release,
+        Ok(CachedReleased::Updater(_)) => unreachable!(),
+        Err(err) => return Err(RouteError::ServerError(ErrorCause::Internal, err.into())),
     };
 
     let updater_filename = format!("{}_{}", platform, config.updater_filename);
@@ -69,10 +68,12 @@ async fn game_version(
         updater_release.get(&updater_filename),
         game_release.binaries.get(&platform),
     ) else {
-        log::error!("No updater or game binary release found for platform {platform}");
-        return Err(RouteError::NotFoundPlatform(PlatformError::new(format!(
-            "No updater or game binary release found for platform {platform}"
-        ))));
+        let msg = format!("No updater or game binary release found for platform '{platform}'");
+        log::error!("{msg}");
+        return Err(RouteError::InvalidRequest(
+            ServerErrorCode::NotFoundPlatform(platform),
+            msg,
+        ));
     };
 
     Ok(HttpResponse::Ok().json(GameVersion {

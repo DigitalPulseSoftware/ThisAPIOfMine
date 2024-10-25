@@ -1,4 +1,5 @@
 pub mod api;
+pub mod codes;
 
 use std::error::Error;
 
@@ -9,8 +10,8 @@ pub type Result<T, E = InternalError> = std::result::Result<T, E>;
 #[derive(Debug)]
 pub enum InternalError {
     // FetcherError
-    InvalidSha256(usize),
-    WrongChecksum,
+    InvalidSha256(usize, String),
+    WrongChecksum(String),
     NoReleaseFound,
     InvalidVersion,
 
@@ -26,6 +27,14 @@ impl InternalError {
         match self {
             Self::External(err) => err.is::<T>(),
             _ => false,
+        }
+    }
+
+    #[inline]
+    pub fn downcast<T: Error + 'static>(&self) -> Option<&T> {
+        match self {
+            Self::External(err) => err.downcast_ref::<T>(),
+            _ => None,
         }
     }
 }

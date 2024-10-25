@@ -8,7 +8,8 @@ use uuid::Uuid;
 use crate::config::ApiConfig;
 use crate::data::token::Token;
 use crate::errors::api::ErrorCause;
-use crate::errors::api::{ErrorCode, RequestError, RouteError};
+use crate::errors::api::RouteError;
+use crate::errors::codes::ServerErrorCode;
 
 #[derive(Deserialize)]
 struct CreatePlayerParams {
@@ -30,20 +31,20 @@ async fn create(
     let nickname = params.nickname.trim();
 
     if nickname.is_empty() {
-        return Err(RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::NicknameEmpty,
+        return Err(RouteError::InvalidRequest(
+            ServerErrorCode::NicknameEmpty,
             "Nickname cannot be empty".to_string(),
-        )));
+        ));
     }
 
     if nickname.len() > config.player_nickname_maxlength {
-        return Err(RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::NicknameToolong,
+        return Err(RouteError::InvalidRequest(
+            ServerErrorCode::NicknameToolong,
             format!(
                 "Nickname size exceeds maximum size of {}",
                 config.player_nickname_maxlength
             ),
-        )));
+        ));
     }
 
     if !config.player_allow_non_ascii {
@@ -51,10 +52,10 @@ async fn create(
             .chars()
             .find(|&x| !x.is_ascii_alphanumeric() && x != ' ' && x != '_')
         {
-            return Err(RouteError::InvalidRequest(RequestError::new(
-                ErrorCode::NicknameForbiddenCharacters,
+            return Err(RouteError::InvalidRequest(
+                ServerErrorCode::NicknameForbiddenCharacters,
                 format!("Nickname can only have ascii characters (invalid character {char})"),
-            )));
+            ));
         }
     }
 
@@ -79,7 +80,7 @@ async fn create(
     let Ok(token) = Token::generate(OsRng) else {
         return Err(RouteError::ServerError(
             ErrorCause::Internal,
-            ErrorCode::TokenGenerationFailed,
+            ServerErrorCode::TokenGenerationFailed,
         ));
     };
 
@@ -128,10 +129,10 @@ async fn auth(
     let player_result = pg_client
         .query_opt(&find_player_info, &[&player_id])
         .await?
-        .ok_or(RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::AuthenticationInvalidToken,
+        .ok_or(RouteError::InvalidRequest(
+            ServerErrorCode::InvalidId,
             format!("No player has the id '{player_id}'"),
-        )))?;
+        ))?;
 
     // Update last connection time in a separate task as its result won't affect the route
     tokio::spawn(async move { update_player_connection(&pg_client, player_id).await });
@@ -147,17 +148,20 @@ pub async fn validate_player_token(
     token: &str,
 ) -> Result<i32, RouteError> {
     if token.is_empty() {
-        return Err(RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::EmptyToken,
+        return Err(RouteError::InvalidRequest(
+            ServerErrorCode::EmptyToken,
             "The token is empty".to_string(),
-        )));
+        ));
     }
 
     if token.len() > 64 {
-        return Err(RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::AuthenticationInvalidToken,
-            format!("The given token '{token}' is invalid (too long)"),
-        )));
+        return Err(RouteError::InvalidRequest(
+            ServerErrorCode::InvalidToken(Some(token.to_string())),
+            format!(
+                "The given token '...{}' is invalid (too long)",
+                &token[token.len() - 6..token.len()]
+            ),
+        ));
     }
 
     let find_token_statement = pg_client
@@ -170,10 +174,13 @@ pub async fn validate_player_token(
     let token_result = pg_client
         .query_opt(&find_token_statement, &[&token])
         .await?
-        .ok_or(RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::AuthenticationInvalidToken,
-            format!("No player has the token '{token}'"),
-        )))?;
+        .ok_or(RouteError::InvalidRequest(
+            ServerErrorCode::AuthenticationInvalidToken(token.to_string()),
+            format!(
+                "No player has the token which ends with '...{}'",
+                &token[token.len() - 6..token.len()]
+            ),
+        ))?;
 
     Ok(token_result.try_get(0)?)
 }
