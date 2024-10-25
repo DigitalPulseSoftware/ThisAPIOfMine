@@ -165,13 +165,16 @@ impl ChecksumFetcher {
     fn parse_response(&self, asset_name: &str, response: &str) -> Result<String> {
         let parts: Vec<_> = response.split_whitespace().collect();
         if parts.len() != 2 {
-            return Err(InternalError::InvalidSha256(parts.len()));
+            return Err(InternalError::InvalidSha256(
+                parts.len(),
+                asset_name.to_string(),
+            ));
         }
 
         let (sha256, filename) = (parts[0], parts[1]);
         match !filename.starts_with('*') || &filename[1..] != asset_name {
             false => Ok(sha256.to_string()),
-            true => Err(InternalError::WrongChecksum),
+            true => Err(InternalError::WrongChecksum(asset_name.to_string())),
         }
     }
 }

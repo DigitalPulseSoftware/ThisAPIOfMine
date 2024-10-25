@@ -3,9 +3,10 @@ use jsonwebtoken::{decode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::types::Type;
 
+use crate::config::ApiConfig;
 use crate::data::game_data_token::GameDataToken;
-use crate::errors::api::{ErrorCode, RequestError};
-use crate::{config::ApiConfig, errors::api::RouteError};
+use crate::errors::api::RouteError;
+use crate::errors::codes::ServerErrorCode;
 
 fn validate_token(
     req: &HttpRequest,
@@ -15,10 +16,10 @@ fn validate_token(
     let header = req
         .headers()
         .get(actix_web::http::header::AUTHORIZATION)
-        .ok_or(RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::InvalidToken(None),
+        .ok_or(RouteError::InvalidRequest(
+            ServerErrorCode::InvalidToken(None),
             "Missing token".to_string(),
-        )))?;
+        ))?;
 
     let jwt = header
         .to_str()
@@ -27,10 +28,7 @@ fn validate_token(
         .flatten()
         .ok_or_else(|| {
             log::error!("Token error, failed to transform AUTHORIZATION header to a string");
-            RouteError::InvalidRequest(RequestError::new(
-                ErrorCode::InvalidToken(None),
-                "Invalid token".into(),
-            ))
+            RouteError::InvalidRequest(ServerErrorCode::InvalidToken(None), "Invalid token".into())
         })?;
 
     let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
@@ -42,10 +40,10 @@ fn validate_token(
         &validation,
     )
     .map_err(|err| {
-        RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::InvalidToken(Some(err.to_string())),
+        RouteError::InvalidRequest(
+            ServerErrorCode::InvalidToken(Some(err.to_string())),
             "Invalid token".to_string(),
-        ))
+        )
     })?;
 
     if token.claims.sub != token_type {
@@ -53,10 +51,10 @@ fn validate_token(
             "Expected {token_type} token but received {}",
             token.claims.sub
         );
-        return Err(RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::InvalidToken(None),
+        return Err(RouteError::InvalidRequest(
+            ServerErrorCode::InvalidToken(None),
             format!("Expected {token_type} token"),
-        )));
+        ));
     }
 
     Ok(token.claims)
@@ -135,7 +133,7 @@ async fn player_ship_get(
         Some(row) => HttpResponse::Ok().json(GetShipResponse {
             ship_data: row.get(0),
         }),
-        None => HttpResponse::NotFound().finish()
+        None => HttpResponse::NotFound().finish(),
     })
 }
 

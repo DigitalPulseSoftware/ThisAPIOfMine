@@ -79,8 +79,8 @@ async fn main() -> Result<(), std::io::Error> {
 
             if err.is::<CreatePoolError>() {
                 panic!("an error occured during the creation of the pool")
-            } else if err.is::<PoolError>() {
-                panic!("failed to connect to database")
+            } else if let Some(err) = err.downcast::<PoolError>() {
+                panic!("failed to connect to database: {err}")
             } else {
                 unreachable!()
             }

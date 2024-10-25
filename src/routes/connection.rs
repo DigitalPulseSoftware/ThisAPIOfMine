@@ -10,7 +10,8 @@ use crate::config::ApiConfig;
 use crate::data::connection_token::{ConnectionToken, PrivateConnectionToken, ServerAddress};
 use crate::data::game_data_token::GameDataToken;
 use crate::data::player_data::PlayerData;
-use crate::errors::api::{ErrorCause, ErrorCode, RequestError, RouteError};
+use crate::errors::api::{ErrorCause, RouteError};
+use crate::errors::codes::ServerErrorCode;
 use crate::routes::players::validate_player_token;
 
 #[derive(Deserialize)]
@@ -45,10 +46,10 @@ async fn game_connect(
     let player_result = pg_client
         .query_opt(&find_player_info, &[&player_id])
         .await?
-        .ok_or(RouteError::InvalidRequest(RequestError::new(
-            ErrorCode::AuthenticationInvalidToken,
+        .ok_or(RouteError::InvalidRequest(
+            ServerErrorCode::InvalidId,
             format!("No player has the id '{player_id}'"),
-        )))?;
+        ))?;
 
     let uuid: Uuid = player_result.try_get(0)?;
     let nickname: String = player_result.try_get(1)?;
@@ -84,10 +85,9 @@ async fn game_connect(
         server_address,
         private_token,
     )
-    .map_err(|_| RouteError::ServerError(
-        ErrorCause::Internal,
-        ErrorCode::TokenGenerationFailed,
-    ))?;
+    .map_err(|_| {
+        RouteError::ServerError(ErrorCause::Internal, ServerErrorCode::TokenGenerationFailed)
+    })?;
 
     Ok(HttpResponse::Ok().json(token))
 }
