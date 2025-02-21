@@ -98,7 +98,7 @@ async fn main() -> Result<(), std::io::Error> {
     let governor_conf = GovernorConfig::default();
 
     let player_create_governor_conf = GovernorConfigBuilder::default()
-        .per_second(10)
+        .seconds_per_request(10)
         .burst_size(1)
         .finish()
         .unwrap();

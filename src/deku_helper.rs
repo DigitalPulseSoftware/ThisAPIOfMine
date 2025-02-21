@@ -2,7 +2,7 @@ use deku::writer::Writer;
 use deku::{DekuError, DekuWriter};
 use uuid::Uuid;
 
-pub fn write_key<W: std::io::Write>(
+pub fn write_key<W: std::io::Write + std::io::Seek>(
     writer: &mut Writer<W>,
     value: &chacha20poly1305::Key,
 ) -> Result<(), DekuError> {
@@ -10,14 +10,17 @@ pub fn write_key<W: std::io::Write>(
     str_bytes.to_writer(writer, ())
 }
 
-pub fn write_str<W: std::io::Write>(writer: &mut Writer<W>, value: &str) -> Result<(), DekuError> {
+pub fn write_str<W: std::io::Write + std::io::Seek>(
+    writer: &mut Writer<W>,
+    value: &str,
+) -> Result<(), DekuError> {
     let str_bytes = value.as_bytes();
     let str_len = str_bytes.len() as u32;
     str_len.to_writer(writer, ())?;
     str_bytes.to_writer(writer, ())
 }
 
-pub fn write_vec_str<W: std::io::Write>(
+pub fn write_vec_str<W: std::io::Write + std::io::Seek>(
     writer: &mut Writer<W>,
     value: &Vec<String>,
 ) -> Result<(), DekuError> {
@@ -31,7 +34,7 @@ pub fn write_vec_str<W: std::io::Write>(
     Ok(())
 }
 
-pub fn write_uuid<W: std::io::Write>(
+pub fn write_uuid<W: std::io::Write + std::io::Seek>(
     writer: &mut Writer<W>,
     value: &Uuid,
 ) -> Result<(), DekuError> {

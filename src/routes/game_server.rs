@@ -24,8 +24,7 @@ fn validate_token(
     let jwt = header
         .to_str()
         .ok()
-        .map(|str| str.strip_prefix("Bearer "))
-        .flatten()
+        .and_then(|str| str.strip_prefix("Bearer "))
         .ok_or_else(|| {
             log::error!("Token error, failed to transform AUTHORIZATION header to a string");
             RouteError::InvalidRequest(ServerErrorCode::InvalidToken(None), "Invalid token".into())
