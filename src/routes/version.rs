@@ -40,7 +40,7 @@ async fn game_version(
         })
         .await
         .cloned();
-    let updater_release = match results_updater_release {
+    let updater_releases = match results_updater_release {
         Ok(CachedReleased::Updater(updater_release)) => updater_release,
         Ok(CachedReleased::Game(_)) => unreachable!(),
         Err(err) => return Err(RouteError::ServerError(ErrorCause::Internal, err.into())),
@@ -56,31 +56,59 @@ async fn game_version(
         })
         .await
         .cloned();
-    let game_release = match results_game_release {
+
+    drop(cache);
+
+    let game_releases = match results_game_release {
         Ok(CachedReleased::Game(game_release)) => game_release,
         Ok(CachedReleased::Updater(_)) => unreachable!(),
         Err(err) => return Err(RouteError::ServerError(ErrorCause::Internal, err.into())),
     };
 
-    let updater_filename = format!("{}_{}", platform, config.updater_filename);
+    // remove the suffix (ex: -server) if any
+    let mut updater_platform = platform.clone();
+    if updater_platform.contains('-') {
+        if let Some((platform, arch)) = updater_platform.split_once('_') {
+            updater_platform = format!(
+                "{}_{}",
+                platform
+                    .split_once('-')
+                    .map_or(platform, |(before, _after)| before),
+                arch
+            );
+        }
+    }
 
-    let (Some(updater), Some(binary)) = (
-        updater_release.get(&updater_filename),
-        game_release.binaries.get(&platform),
-    ) else {
-        let msg = format!("No updater or game binary release found for platform '{platform}'");
-        log::error!("{msg}");
-        return Err(RouteError::InvalidRequest(
-            ServerErrorCode::NotFoundPlatform(platform),
-            msg,
-        ));
+    let updater_filename = format!("{}_{}", updater_platform, config.updater_filename);
+    let updater_binary = match updater_releases.get(&updater_filename) {
+        Some(asset) => asset.clone(),
+        None => {
+            let msg = format!("No updater binary release found for platform '{updater_platform}'");
+            log::error!("{msg}");
+            return Err(RouteError::InvalidRequest(
+                ServerErrorCode::NotFoundPlatform(updater_platform),
+                msg,
+            ));
+        }
+    };
+
+    let game_binary = match game_releases.binaries.get(&platform) {
+        Some(asset) => asset.clone(),
+        None => {
+            let msg = format!("No game binary release found for platform '{platform}'");
+            log::error!("{msg}");
+            return Err(RouteError::InvalidRequest(
+                ServerErrorCode::NotFoundPlatform(platform),
+                msg,
+            ));
+        }
     };
 
     Ok(HttpResponse::Ok().json(GameVersion {
-        assets: game_release.assets,
-        assets_version: game_release.assets_version.to_string(),
-        binaries: binary.clone(),
-        updater: updater.clone(),
-        version: game_release.version.to_string(),
+        assets: game_releases.assets,
+        assets_version: game_releases.assets_version.to_string(),
+        binaries: game_binary,
+        updater: updater_binary,
+        version: game_releases.version.to_string(),
     }))
 }
