@@ -7,7 +7,7 @@ use crate::app_data::AppData;
 use crate::config::ApiConfig;
 use crate::errors::api::{ErrorCause, RouteError};
 use crate::errors::codes::ServerErrorCode;
-use crate::game_data::{Assets, GameRelease, GameVersion};
+use crate::game_data::{AssetPerPlatform, GameReleases, GameVersion};
 
 #[derive(Deserialize)]
 struct VersionQuery {
@@ -16,8 +16,8 @@ struct VersionQuery {
 
 #[derive(Clone)]
 pub(crate) enum CachedReleased {
-    Updater(Assets),
-    Game(GameRelease),
+    Updater(AssetPerPlatform),
+    Game(GameReleases),
 }
 
 #[get("/game_version")]
@@ -40,6 +40,7 @@ async fn game_version(
         })
         .await
         .cloned();
+
     let updater_releases = match results_updater_release {
         Ok(CachedReleased::Updater(updater_release)) => updater_release,
         Ok(CachedReleased::Game(_)) => unreachable!(),
@@ -48,9 +49,9 @@ async fn game_version(
 
     // TODO: remove .cloned
     let results_game_release = cache
-        .try_get_or_set_with("latest_game_release", || async {
+        .try_get_or_set_with("latest_game_releases", || async {
             fetcher
-                .get_latest_game_release()
+                .get_latest_game_releases()
                 .await
                 .map(CachedReleased::Game)
         })
@@ -104,11 +105,33 @@ async fn game_version(
         }
     };
 
+    // Find first Asset matching game version
+    let assets = match game_releases
+        .assets
+        .iter()
+        .find(|assets| assets.version <= game_binary.version)
+    {
+        Some(assets) => assets,
+        None => {
+            let msg = format!(
+                "No assets found matching version '{0}'",
+                game_binary.version
+            );
+            log::error!("{msg}");
+            return Err(RouteError::InvalidRequest(
+                ServerErrorCode::NotFoundPlatform(platform),
+                msg,
+            ));
+        }
+    };
+
+    let game_version = game_binary.version.clone();
+
     Ok(HttpResponse::Ok().json(GameVersion {
-        assets: game_releases.assets,
-        assets_version: game_releases.assets_version.to_string(),
+        assets: assets.clone(),
+        assets_version: assets.version.to_string(),
         binaries: game_binary,
         updater: updater_binary,
-        version: game_releases.version.to_string(),
+        version: game_version.to_string(),
     }))
 }

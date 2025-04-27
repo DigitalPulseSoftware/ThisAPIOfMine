@@ -21,14 +21,13 @@ pub struct Repo {
     repository: String,
 }
 
-pub type Assets = HashMap<String, Asset>;
+pub type AssetList = Vec<Asset>;
+pub type AssetPerPlatform = HashMap<String /*platform*/, Asset>;
 
 #[derive(Clone)]
-pub struct GameRelease {
-    pub assets: Asset,
-    pub assets_version: Version,
-    pub binaries: Assets,
-    pub version: Version,
+pub struct GameReleases {
+    pub assets: AssetList,
+    pub binaries: AssetPerPlatform,
 }
 
 #[derive(Serialize)]

@@ -1,12 +1,15 @@
+use std::time::Duration;
+
 use futures::future::join_all;
 use octocrab::models::repos;
 use octocrab::repos::RepoHandler;
 use octocrab::{Octocrab, OctocrabBuilder};
+use reqwest::StatusCode;
 use semver::Version;
 
 use crate::config::ApiConfig;
 use crate::errors::{InternalError, Result};
-use crate::game_data::{Asset, Assets, GameRelease, Repo};
+use crate::game_data::{Asset, AssetList, AssetPerPlatform, GameReleases, Repo};
 
 pub struct Fetcher {
     octocrab: Octocrab,
@@ -16,7 +19,7 @@ pub struct Fetcher {
     checksum_fetcher: ChecksumFetcher,
 }
 
-struct ChecksumFetcher(reqwest::Client);
+struct ChecksumFetcher(reqwest_middleware::ClientWithMiddleware);
 
 impl Fetcher {
     pub fn from_config(config: &ApiConfig) -> Result<Self> {
@@ -38,11 +41,12 @@ impl Fetcher {
         self.octocrab.repos(repo.owner(), repo.repository())
     }
 
-    pub async fn get_latest_game_release(&self) -> Result<GameRelease> {
+    pub async fn get_latest_game_releases(&self) -> Result<GameReleases> {
         let releases = self
             .on_repo(&self.game_repo)
             .releases()
             .list()
+            .per_page(100)
             .send()
             .await?;
 
@@ -58,36 +62,52 @@ impl Fetcher {
         let mut binaries = self
             .get_assets_and_checksums(&latest_release.assets, &latest_version, None)
             .await
-            .map(|((platform, mut asset), sha256)| {
-                asset.sha256 = sha256?;
-                Ok((platform.to_string(), asset))
+            .filter_map(|((platform, mut asset), sha256)| {
+                match sha256 {
+                    Ok(checksum) => {
+                        asset.sha256 = checksum;
+                        Some(Ok((platform.to_string(), asset)))
+                    },
+                    Err(err) => {
+                        log::error!("ignoring asset {0} (version: {1}) because an error occurred for checksum: {2:?}", asset.name, asset.version, err);
+                        None
+                    }
+                }
             })
-            .collect::<Result<Assets>>()?;
+            .collect::<Result<AssetPerPlatform>>()?;
+
+        let mut assets = AssetList::new();
 
         for (version, release) in versions_released {
             for ((platform, mut asset), sha256) in self
                 .get_assets_and_checksums(&release.assets, &version, Some(&binaries))
                 .await
             {
-                asset.sha256 = sha256?;
-                binaries.insert(platform.to_string(), asset);
+                match sha256 {
+                    Ok(checksum) => {
+                        asset.sha256 = checksum;
+
+                        if platform == "assets" {
+                            assets.push(asset);
+                        } else {
+                            binaries.insert(platform.to_string(), asset);
+                        }
+                    },
+                    Err(err) => {
+                        log::error!("ignoring asset {0} (version: {1}) because an error occurred for checksum: {2:?}", asset.name, asset.version, err);
+                    }
+                }
             }
         }
 
-        let latest_assets = binaries.remove("assets");
-
-        match latest_assets {
-            Some(assets) => Ok(GameRelease {
-                assets_version: assets.version.clone(),
-                assets,
-                binaries,
-                version: latest_version,
-            }),
-            None => Err(InternalError::NoReleaseFound),
+        if binaries.is_empty() {
+            return Err(InternalError::NoReleaseFound);
         }
+
+        Ok(GameReleases { assets, binaries })
     }
 
-    pub async fn get_latest_updater_release(&self) -> Result<Assets> {
+    pub async fn get_latest_updater_release(&self) -> Result<AssetPerPlatform> {
         let last_release = self
             .on_repo(&self.updater_repo)
             .releases()
@@ -98,18 +118,26 @@ impl Fetcher {
 
         self.get_assets_and_checksums(&last_release.assets, &version, None)
             .await
-            .map(|((platform, mut asset), sha256)| {
-                asset.sha256 = sha256?;
-                Ok((platform.to_string(), asset))
+            .filter_map(|((platform, mut asset), sha256)| {
+                match sha256 {
+                    Ok(checksum) => {
+                        asset.sha256 = checksum;
+                        Some(Ok((platform.to_string(), asset)))
+                    },
+                    Err(err) => {
+                        log::error!("ignoring updater {0} (version: {1}) because an error occurred for checksum: {2:?}", asset.name, asset.version, err);
+                        None
+                    }
+                }
             })
-            .collect::<Result<Assets>>()
+            .collect::<Result<AssetPerPlatform>>()
     }
 
     async fn get_assets_and_checksums<'a: 'b, 'b, A>(
         &self,
         assets: A,
         version: &Version,
-        binaries: Option<&Assets>,
+        binaries: Option<&AssetPerPlatform>,
     ) -> impl Iterator<Item = ((&'b str, Asset), Result<Option<String>>)>
     where
         A: IntoIterator<Item = &'a repos::Asset>,
@@ -140,7 +168,16 @@ impl Fetcher {
 
 impl ChecksumFetcher {
     fn new() -> Self {
-        Self(reqwest::Client::new())
+        let retry_policy = reqwest_retry::policies::ExponentialBackoff::builder()
+            .build_with_total_retry_duration_and_max_retries(Duration::from_secs(15));
+
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            .with(reqwest_retry::RetryTransientMiddleware::new_with_policy(
+                retry_policy,
+            ))
+            .build();
+
+        Self(client)
     }
 
     async fn resolve(&self, asset: &Asset) -> Result<Option<String>> {
@@ -151,10 +188,9 @@ impl ChecksumFetcher {
             .send()
             .await?;
 
-        match response.status().is_client_error() {
-            // No SHA256 found
-            true => Ok(None),
-            false => {
+        match response.status() {
+            StatusCode::NOT_FOUND => Ok(None),
+            _ => {
                 let content = response.text().await?;
                 self.parse_response(asset.name.as_str(), content.as_str())
                     .map(Some)
