@@ -1,4 +1,4 @@
-use actix_web::{post, web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, post, web};
 use deadpool_postgres::tokio_postgres::types::Type;
 
 use rand_core::OsRng;
@@ -199,7 +199,9 @@ async fn update_player_connection(pg_client: &deadpool_postgres::Client, player_
             }
         }
         Err(err) => {
-            log::error!("Failed to update player {player_id} connection time (failed to prepare query): {err}");
+            log::error!(
+                "Failed to update player {player_id} connection time (failed to prepare query): {err}"
+            );
         }
     }
 }

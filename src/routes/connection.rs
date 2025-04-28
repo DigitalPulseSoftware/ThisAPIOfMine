@@ -1,4 +1,4 @@
-use actix_web::{post, web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, post, web};
 use deadpool_postgres::tokio_postgres::types::Type;
 use futures::{StreamExt, TryStreamExt};
 use jsonwebtoken::{EncodingKey, Header};

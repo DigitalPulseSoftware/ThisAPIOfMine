@@ -92,9 +92,14 @@ impl Fetcher {
                         } else {
                             binaries.insert(platform.to_string(), asset);
                         }
-                    },
+                    }
                     Err(err) => {
-                        log::error!("ignoring asset {0} (version: {1}) because an error occurred for checksum: {2:?}", asset.name, asset.version, err);
+                        log::error!(
+                            "ignoring asset {0} (version: {1}) because an error occurred for checksum: {2:?}",
+                            asset.name,
+                            asset.version,
+                            err
+                        );
                     }
                 }
             }
@@ -138,7 +143,7 @@ impl Fetcher {
         assets: A,
         version: &Version,
         binaries: Option<&AssetPerPlatform>,
-    ) -> impl Iterator<Item = ((&'b str, Asset), Result<Option<String>>)>
+    ) -> impl Iterator<Item = ((&'b str, Asset), Result<Option<String>>)> + use<'b, A>
     where
         A: IntoIterator<Item = &'a repos::Asset>,
     {

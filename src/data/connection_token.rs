@@ -1,5 +1,5 @@
-use chacha20poly1305::aead::{AeadCore, AeadMutInPlace, KeyInit, OsRng};
 use chacha20poly1305::XChaCha20Poly1305;
+use chacha20poly1305::aead::{AeadCore, AeadMutInPlace, KeyInit, OsRng};
 use deku::prelude::*;
 use rand_core::{CryptoRng, RngCore};
 use serde::Serialize;

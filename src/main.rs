@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use actix_governor::{Governor, GovernorConfig, GovernorConfigBuilder};
-use actix_web::{middleware, web, App, HttpServer};
+use actix_web::{App, HttpServer, middleware, web};
 use cached::TimedCache;
 use confy::ConfyError;
 use tokio::sync::Mutex;
@@ -46,7 +46,9 @@ async fn setup_pg_pool(api_config: &ApiConfig) -> Result<deadpool_postgres::Pool
 
 #[actix_web::main]
 async fn main() -> Result<(), std::io::Error> {
-    std::env::set_var("RUST_LOG", "info,actix_web=info");
+    unsafe {
+        std::env::set_var("RUST_LOG", "info,actix_web=info");
+    }
     env_logger::init();
 
     let mut args = std::env::args();

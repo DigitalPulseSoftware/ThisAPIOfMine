@@ -68,7 +68,9 @@ impl GeneralErrorCode {
 
     pub fn description(&self) -> &str {
         match self {
-            Self::FetchLatestRelease => "An internal error occured during the fetching of the latest release, please retry later",
+            Self::FetchLatestRelease => {
+                "An internal error occured during the fetching of the latest release, please retry later"
+            }
             Self::NotFoundPlatform => "The given platform has no associated release",
 
             Self::NicknameEmpty => "The given nickname is empty",

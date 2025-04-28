@@ -1,5 +1,5 @@
-use actix_web::{get, patch, post, web, HttpRequest, HttpResponse, Responder};
-use jsonwebtoken::{decode, DecodingKey, EncodingKey, Header, Validation};
+use actix_web::{HttpRequest, HttpResponse, Responder, get, patch, post, web};
+use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::types::Type;
 
