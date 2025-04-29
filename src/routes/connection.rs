@@ -76,8 +76,12 @@ async fn game_connect(
 
     let player_data = PlayerData::new(uuid, nickname, permissions);
 
-    let refresh_token =
-        GameDataToken::new_refresh(player_id, uuid, config.game_api_refresh_token_duration);
+    let refresh_token = GameDataToken::new_refresh(
+        player_id,
+        uuid,
+        config.game_api_refresh_token_duration,
+        is_dev,
+    );
     let refresh_token_jwt = jsonwebtoken::encode(
         &Header::default(),
         &refresh_token,

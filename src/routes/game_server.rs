@@ -77,11 +77,13 @@ async fn refresh_access_token(
         refresh_token.player_db_id,
         refresh_token.player_uuid,
         config.game_api_access_token_duration,
+        refresh_token.is_readonly,
     );
     let refresh_token = GameDataToken::new_refresh(
         refresh_token.player_db_id,
         refresh_token.player_uuid,
         config.game_api_refresh_token_duration,
+        refresh_token.is_readonly,
     );
 
     let access_token_jwt = jsonwebtoken::encode(
@@ -150,6 +152,12 @@ async fn player_ship_patch(
     pg_pool: web::Data<deadpool_postgres::Pool>,
 ) -> Result<impl Responder, RouteError> {
     let access_token = validate_token(&req, &config, "access")?;
+    if access_token.is_readonly {
+        return Err(RouteError::InvalidRequest(
+            ServerErrorCode::InvalidToken(Some("Token is readonly".into())),
+            "Token only allows for readonly access to the player data".to_string(),
+        ));
+    }
 
     let pg_client = pg_pool.get().await?;
     let insert_player_ship = pg_client
