@@ -64,7 +64,7 @@ pub struct ConnectionToken<'a> {
 
 impl<'a> ConnectionToken<'a> {
     pub fn generate(
-        token_key: chacha20poly1305::Key,
+        token_key: &chacha20poly1305::Key,
         duration: Duration,
         server_address: ServerAddress<'a>,
         private_token: PrivateConnectionToken,
@@ -89,7 +89,7 @@ impl<'a> ConnectionToken<'a> {
         let mut private_token_bytes = private_token.to_bytes()?;
         private_token_bytes.resize(private_token_bytes.len() + XCHACHA20POLY1305_IETF_ABYTES, 0);
 
-        let mut cipher = XChaCha20Poly1305::new(&token_key);
+        let mut cipher = XChaCha20Poly1305::new(token_key);
         cipher.encrypt_in_place(
             &nonce,
             additional_data_bytes.as_slice(),

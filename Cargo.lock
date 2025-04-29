@@ -594,6 +594,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "const_base"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b64b297eeb71d1ad825d0b78257940c0a4fc10c8ebfc67f38f0daf256f69bdb4"
+dependencies = [
+ "const_panic",
+]
+
+[[package]]
+name = "const_panic"
+version = "0.2.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2459fc9262a1aa204eb4b5764ad4f189caec88aea9634389c0a25f8be7f6265e"
+
+[[package]]
 name = "cookie"
 version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2842,6 +2857,7 @@ dependencies = [
  "cached",
  "chacha20poly1305",
  "confy",
+ "const_base",
  "deadpool-postgres",
  "deku",
  "env_logger",
