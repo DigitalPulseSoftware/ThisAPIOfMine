@@ -174,7 +174,7 @@ impl Fetcher {
 impl ChecksumFetcher {
     fn new() -> Self {
         let retry_policy = reqwest_retry::policies::ExponentialBackoff::builder()
-            .build_with_total_retry_duration_and_max_retries(Duration::from_secs(15));
+            .build_with_total_retry_duration_and_max_retries(Duration::from_secs(15), 3);
 
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
             .with(reqwest_retry::RetryTransientMiddleware::new_with_policy(

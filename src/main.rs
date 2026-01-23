@@ -92,7 +92,7 @@ async fn main() -> Result<(), std::io::Error> {
     let bind_address = format!("{}:{}", config.listen_address, config.listen_port);
 
     let data_config = web::Data::new(AppData {
-        cache: Mutex::new(TimedCache::with_lifespan(config.cache_lifespan.as_secs())), // 5min
+        cache: Mutex::new(TimedCache::with_lifespan(config.cache_lifespan)), // 5min
         fetcher,
     });
     let config = web::Data::new(config);
