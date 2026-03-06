@@ -125,7 +125,7 @@ impl ServerErrorCode {
         }
     }
 
-    pub fn extra_info(&self) -> Option<Cow<str>> {
+    pub fn extra_info(&self) -> Option<Cow<'_, str>> {
         match self {
             Self::InvalidSha256(parts, assets) => Some(Cow::Owned(format!(
                 "The SHA256 file of {assets} has {parts} parts, please fix it!"
