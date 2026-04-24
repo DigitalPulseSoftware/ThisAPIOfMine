@@ -47,16 +47,15 @@ async fn create(
         ));
     }
 
-    if !config.player_allow_non_ascii {
-        if let Some(char) = nickname
+    if !config.player_allow_non_ascii
+        && let Some(char) = nickname
             .chars()
             .find(|&x| !x.is_ascii_alphanumeric() && x != ' ' && x != '_')
-        {
-            return Err(RouteError::InvalidRequest(
-                ServerErrorCode::NicknameForbiddenCharacters,
-                format!("Nickname can only have ascii characters (invalid character {char})"),
-            ));
-        }
+    {
+        return Err(RouteError::InvalidRequest(
+            ServerErrorCode::NicknameForbiddenCharacters,
+            format!("Nickname can only have ascii characters (invalid character {char})"),
+        ));
     }
 
     let uuid = Uuid::new_v4();

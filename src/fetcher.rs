@@ -9,7 +9,7 @@ use semver::Version;
 
 use crate::config::ApiConfig;
 use crate::errors::{InternalError, Result};
-use crate::game_data::{Asset, AssetList, AssetPerPlatform, GameReleases, Repo};
+use crate::game_data::{Asset, AssetPerPlatform, GameReleases, Repo};
 
 pub struct Fetcher {
     octocrab: Octocrab,
@@ -76,8 +76,7 @@ impl Fetcher {
             })
             .collect::<Result<AssetPerPlatform>>()?;
 
-        let mut assets = AssetList::new();
-
+        // Try to find assets/platforms only supported in previous versions
         for (version, release) in versions_released {
             for ((platform, mut asset), sha256) in self
                 .get_assets_and_checksums(&release.assets, &version, Some(&binaries))
@@ -86,12 +85,7 @@ impl Fetcher {
                 match sha256 {
                     Ok(checksum) => {
                         asset.sha256 = checksum;
-
-                        if platform == "assets" {
-                            assets.push(asset);
-                        } else {
-                            binaries.insert(platform.to_string(), asset);
-                        }
+                        binaries.insert(platform.to_string(), asset);
                     }
                     Err(err) => {
                         log::error!(
@@ -104,6 +98,8 @@ impl Fetcher {
                 }
             }
         }
+
+        let assets = binaries.remove("assets");
 
         if binaries.is_empty() {
             return Err(InternalError::NoReleaseFound);

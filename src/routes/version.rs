@@ -68,16 +68,16 @@ async fn game_version(
 
     // remove the suffix (ex: -server) if any
     let mut updater_platform = platform.clone();
-    if updater_platform.contains('-') {
-        if let Some((platform, arch)) = updater_platform.split_once('_') {
-            updater_platform = format!(
-                "{}_{}",
-                platform
-                    .split_once('-')
-                    .map_or(platform, |(before, _after)| before),
-                arch
-            );
-        }
+    if updater_platform.contains('-')
+        && let Some((platform, arch)) = updater_platform.split_once('_')
+    {
+        updater_platform = format!(
+            "{}_{}",
+            platform
+                .split_once('-')
+                .map_or(platform, |(before, _after)| before),
+            arch
+        );
     }
 
     let updater_filename = format!("{}_{}", updater_platform, config.updater_filename);
@@ -106,12 +106,21 @@ async fn game_version(
     };
 
     // Find first Asset matching game version
-    let assets = match game_releases
-        .assets
-        .iter()
-        .find(|assets| assets.version <= game_binary.version)
-    {
-        Some(assets) => assets,
+    let assets = match game_releases.assets {
+        Some(assets) => {
+            if assets.version < game_binary.version  {
+                log::error!(
+                    "assets don't match game version (game version: {0}, assets version: {1})",
+                    game_binary.version,
+                    assets.version
+                );
+                return Err(RouteError::ServerError(
+                    ErrorCause::Internal,
+                    ServerErrorCode::Internal,
+                ));
+            }
+            assets
+        }
         None => {
             let msg = format!(
                 "No assets found matching version '{0}'",

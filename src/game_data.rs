@@ -4,7 +4,7 @@ use octocrab::models::repos;
 use semver::Version;
 use serde::Serialize;
 
-#[derive(Clone, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Asset {
     pub size: i64,
     // serialisation skipped to race with the previous api
@@ -21,12 +21,11 @@ pub struct Repo {
     repository: String,
 }
 
-pub type AssetList = Vec<Asset>;
 pub type AssetPerPlatform = HashMap<String /*platform*/, Asset>;
 
 #[derive(Clone)]
 pub struct GameReleases {
-    pub assets: AssetList,
+    pub assets: Option<Asset>,
     pub binaries: AssetPerPlatform,
 }
 

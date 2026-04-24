@@ -51,7 +51,9 @@ async fn main() -> Result<(), std::io::Error> {
     }
     env_logger::init();
 
-    rustls::crypto::ring::default_provider().install_default().expect("Failed to install rustls crypto provider");
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
 
     let mut args = std::env::args();
     args.next(); // skip the executable name
