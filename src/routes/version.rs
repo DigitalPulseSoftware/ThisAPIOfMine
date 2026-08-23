@@ -108,7 +108,7 @@ async fn game_version(
     // Find first Asset matching game version
     let assets = match game_releases.assets {
         Some(assets) => {
-            if assets.version < game_binary.version  {
+            if assets.version < game_binary.version {
                 log::error!(
                     "assets don't match game version (game version: {0}, assets version: {1})",
                     game_binary.version,
